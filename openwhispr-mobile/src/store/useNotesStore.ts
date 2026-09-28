@@ -158,6 +158,9 @@ const canUseCloudForMeetingNote = (note: Note | null | undefined): note is Note 
 const autoGenerateMeetingNotes = async (noteId: number): Promise<void> => {
   const note = notesRepository.getNoteById(noteId);
   if (!note || note.deletedAt || note.noteType !== 'meeting') return;
+  // Generated notes the user already has (edited, or from an action they ran) are never replaced
+  // automatically, e.g. by retrying a transcript; the Enhanced tab marks them stale instead.
+  if (note.enhancedContent?.trim()) return;
 
   const action = notesRepository.getActions().find(isDefaultGenerateNotesAction);
   if (!action) return;
@@ -200,7 +203,10 @@ const autoGenerateMeetingNotes = async (noteId: number): Promise<void> => {
   });
 
   const writeGeneratedText = (generatedText: string) => {
-    if (!generatedText.trim()) return;
+    // The user may have run an action or written notes while these were generated.
+    if (!generatedText.trim() || notesRepository.getNoteById(noteId)?.enhancedContent?.trim()) {
+      return;
+    }
     notesRepository.updateNote(noteId, {
       enhancedContent: generatedText,
       enhancementPrompt: action.prompt,
@@ -359,6 +365,8 @@ interface NotesStore {
   deleteFolderSafe: (id: number) => void;
   /** Creates in the private space unless `spaceId` names a team space to create it inside. */
   createFolder: (name: string, spaceId?: number) => Folder;
+  /** Folders of any space, read from the repository. `spaceFolders` only caches the browsed space's. */
+  getSpaceFolders: (spaceId: number) => Folder[];
   renameFolder: (id: number, name: string) => void;
   setNotePrivacy: (id: number, isPrivate: boolean) => Promise<void>;
   /** Data source for the conflict banner (see NoteEditorScreen) — the parked 409 row for this note, if any. */
@@ -559,6 +567,8 @@ export const useNotesStore = create<NotesStore>((set, get) => ({
     get().loadNotes();
     get().loadFolders();
   },
+
+  getSpaceFolders: (spaceId) => notesRepository.getFoldersBySpace(spaceId),
 
   moveNoteToFolder: (noteId, folderId) => {
     notesRepository.moveNoteToFolder(noteId, folderId);
