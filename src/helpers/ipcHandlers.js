@@ -36,6 +36,7 @@ const { resolveSystemDefaultMicrophone } = require("./systemDefaultMicrophone");
 const {
   registerConnectorIpc,
   createConnectorPolicyResolver,
+  createConnectorAuthLookup,
 } = require("./connectors/connectorIpc");
 const { searchContacts } = require("./connectors/contactSearch");
 // The renderer's ModelRegistry is not main-loadable; the raw registry data is
@@ -691,6 +692,8 @@ class IPCHandlers {
         generation,
         hasToken: Boolean(token),
       });
+      // A sign-out or another account changes whose login shows.
+      void this.connectorManager?.notifyStatusChanged();
     });
 
     if (this.whisperManager?.serverManager) {
@@ -2213,6 +2216,7 @@ class IPCHandlers {
         "active-account-scope-changed",
         accountId !== null ? { accountId, authGeneration: state.generation } : null
       );
+      void this.connectorManager?.notifyStatusChanged();
       return { success: true };
     });
 
@@ -2238,6 +2242,8 @@ class IPCHandlers {
         };
       }
       try {
+        // Best effort; each revoke has a 5s deadline (connectorManager.js).
+        await this.connectorManager?.disconnectAll();
         const result = this.databaseManager.deleteAccountData(accountId);
         this.notifyVectorChanges();
         for (const noteId of result.deletedNoteIds) {
@@ -4021,7 +4027,8 @@ class IPCHandlers {
       } catch (e) {
         errors.push(`Device setting files: ${e.message}`);
       }
-      for (const directoryName of ["bin", "llama-cpp"]) {
+      // "connectors" holds encrypted connector logins (Slack, …).
+      for (const directoryName of ["bin", "llama-cpp", "connectors"]) {
         try {
           fs.rmSync(path.join(app.getPath("userData"), directoryName), {
             recursive: true,
@@ -6057,7 +6064,11 @@ class IPCHandlers {
         ipcMain,
         manager: this.connectorManager,
         getPolicyState: createConnectorPolicyResolver({
-          getAuthHeader,
+          getAuthHeader: createConnectorAuthLookup({
+            hasBearerToken: () => Boolean(tokenStore.get()),
+            windowFor: (event) => BrowserWindow.fromWebContents(event.sender),
+            authHeaderFor: getAuthHeaderFromWindow,
+          }),
           getPolicy: (options) => workspacePolicyManager.getPolicy(options),
           peekPolicy: (options) => workspacePolicyManager.peekPolicy(options),
           getAuthGeneration: () => tokenStore.getState().generation,

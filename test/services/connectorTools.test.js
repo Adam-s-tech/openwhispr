@@ -4,6 +4,8 @@ const { installBrowserGlobals, createRendererServer } = require("../lib/renderer
 
 const loadEmail = () => import("../../src/services/tools/connectors/emailDraftTool.ts");
 const loadContact = () => import("../../src/services/tools/connectors/findContactTool.ts");
+const loadSlack = () => import("../../src/services/tools/connectors/slackSendMessageTool.ts");
+const loadApprovals = () => import("../../src/stores/connectorApprovalStore.ts");
 const loadEligibility = () => import("../../src/utils/connectorEligibility.ts");
 const loadRegistry = () => import("../../src/services/tools/index.ts");
 // Tool-step text is localized; the UI language otherwise follows the machine's locale.
@@ -142,6 +144,7 @@ test("email_draft keeps only the address from a display-name recipient", async (
 function countingContext(signal = new AbortController().signal) {
   const context = {
     holds: 0,
+    messageId: "m1",
     preservesClipboard: false,
     toolCallId: "call-1",
     signal,
@@ -155,6 +158,139 @@ function countingContext(signal = new AbortController().signal) {
   };
   return context;
 }
+
+function toolContext(messageId, toolCallId, held = { count: 0 }) {
+  return {
+    messageId,
+    toolCallId,
+    signal: new AbortController().signal,
+    onApprovalRequested() {},
+    onHoldDelivery() {
+      held.count += 1;
+    },
+    claimTurnSlot: () => true,
+  };
+}
+
+test("slack_send_message prepares in main, passes a clarification through, and holds delivery", async (t) => {
+  const prepared = [];
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async (...args) => {
+          prepared.push(args);
+          return {
+            status: "needs_clarification",
+            message: 'More than one match for "gab". Ask the user which one they meant.',
+            candidates: ["Gabe Smith (@gabe)", "Gabriel Stone (@gstone)"],
+          };
+        },
+      },
+    },
+  });
+  const { slackSendMessageTool } = await loadSlack();
+  const held = { count: 0 };
+
+  const result = await slackSendMessageTool.execute(
+    { destination: " gab ", text: "hi" },
+    toolContext("m1", "call-1", held)
+  );
+
+  assert.deepEqual(prepared, [["slack", "send_message", { destination: "gab", text: "hi" }]]);
+  assert.equal(result.data.status, "needs_clarification");
+  assert.deepEqual(result.data.candidates, ["Gabe Smith (@gabe)", "Gabriel Stone (@gstone)"]);
+  assert.equal(held.count, 1, "the question stays in the panel, never pasted at the caret");
+});
+
+test("slack_send_message turns a channel that vanished by Send into a question", async (t) => {
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => ({
+          status: "ready",
+          actionId: "a9",
+          preview: {
+            verbKey: "slackPost",
+            destinationLabel: "#eng",
+            accountLabel: "chad",
+            workspaceLabel: "Acme",
+            body: "hi",
+          },
+        }),
+        connectorCommit: async () => ({
+          state: "failed",
+          errorCode: "channel_not_found",
+          message: "#eng couldn't be found in Slack anymore.",
+        }),
+        connectorCancel: async () => ({ cancelled: true }),
+      },
+    },
+  });
+  const [{ slackSendMessageTool }, approvals] = await Promise.all([loadSlack(), loadApprovals()]);
+  approvals.useConnectorApprovalStore.setState({ entries: {} });
+  const key = approvals.approvalKey("m9", "call-9");
+
+  const pending = slackSendMessageTool.execute(
+    { destination: "#eng", text: "hi" },
+    toolContext("m9", "call-9")
+  );
+  while (!approvals.useConnectorApprovalStore.getState().entries[key]) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await approvals.approveAction(key);
+  const result = await pending;
+
+  assert.equal(result.data.status, "needs_clarification");
+  assert.match(result.data.message, /#eng/);
+  assert.equal(
+    approvals.useConnectorApprovalStore.getState().entries[key].errorCode,
+    "channel_not_found"
+  );
+});
+
+test("slack_send_message refuses empty text without preparing", async (t) => {
+  let prepared = 0;
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorPrepare: async () => {
+          prepared += 1;
+        },
+      },
+    },
+  });
+  const { slackSendMessageTool } = await loadSlack();
+
+  const result = await slackSendMessageTool.execute(
+    { destination: "#eng", text: "   " },
+    toolContext("m1", "call-2")
+  );
+
+  assert.equal(result.data.status, "failed");
+  assert.equal(result.data.errorCode, "no_text");
+  assert.equal(prepared, 0);
+});
+
+test("slack_send_message registers only when Slack is ready", async () => {
+  const { createToolRegistry } = await loadRegistry();
+  const base = {
+    isSignedIn: true,
+    calendarConnected: false,
+    cloudBackupEnabled: false,
+    webSearchEnabled: false,
+  };
+  const names = (connectors) =>
+    createToolRegistry({ ...base, connectors })
+      .getAll()
+      .map((tool) => tool.name);
+
+  assert.ok(names({ emailDraftTarget: "gmail", slackReady: true }).includes("slack_send_message"));
+  assert.equal(
+    names({ emailDraftTarget: "gmail", slackReady: false }).includes("slack_send_message"),
+    false
+  );
+  assert.equal(names(undefined).includes("slack_send_message"), false);
+});
 
 const loadScope = () => import("../../src/components/chat/toolExecutionScope.ts");
 
@@ -175,7 +311,10 @@ test("email_draft opens at most three drafts per turn", async (t) => {
   const scope = createToolExecutionScope();
   const tool = createEmailDraftTool("gmail");
   const draft = (id) =>
-    tool.execute({ to: ["a@example.com"], subject: "s", body: "b" }, scope.createContext(id));
+    tool.execute(
+      { to: ["a@example.com"], subject: "s", body: "b" },
+      scope.createContext({ messageId: "m1", toolCallId: id })
+    );
 
   // The AI SDK runs a step's tool calls in parallel.
   const results = await Promise.all(["1", "2", "3", "4"].map(draft));
@@ -187,7 +326,7 @@ test("email_draft opens at most three drafts per turn", async (t) => {
   );
   assert.equal(results[3].data.reason, "draft_limit");
   // A new turn starts over.
-  const next = createToolExecutionScope().createContext("5");
+  const next = createToolExecutionScope().createContext({ messageId: "m1", toolCallId: "5" });
   assert.equal(
     (await tool.execute({ to: ["a@example.com"], subject: "s", body: "b" }, next)).data.status,
     "draft_opened"
@@ -220,15 +359,18 @@ test("only one draft per turn may put its text on the clipboard", async (t) => {
   const [first, second] = await Promise.all([
     tool.execute(
       { to: ["josh@example.com"], subject: "Recap", body: longBody },
-      scope.createContext("1")
+      scope.createContext({ messageId: "m1", toolCallId: "1" })
     ),
     tool.execute(
       { to: ["dana@example.com"], subject: "Recap", body: longBody },
-      scope.createContext("2")
+      scope.createContext({ messageId: "m1", toolCallId: "2" })
     ),
   ]);
   const short = (id, address) =>
-    tool.execute({ to: [address], subject: "Hi", body: "Short one." }, scope.createContext(id));
+    tool.execute(
+      { to: [address], subject: "Hi", body: "Short one." },
+      scope.createContext({ messageId: "m1", toolCallId: id })
+    );
   const third = await short("3", "kim@example.com");
   // The refused draft gave its draft slot back, so this is the third to open.
   const fourth = await short("4", "lee@example.com");
@@ -269,7 +411,12 @@ test("a draft that didn't open gives back its draft and clipboard slots", async 
   const statuses = [];
   for (const id of ["1", "2", "3", "4"]) {
     statuses.push(
-      (await createEmailDraftTool("mailto").execute(draft, scope.createContext(id))).data.status
+      (
+        await createEmailDraftTool("mailto").execute(
+          draft,
+          scope.createContext({ messageId: "m1", toolCallId: id })
+        )
+      ).data.status
     );
   }
 
@@ -300,8 +447,14 @@ test("a draft whose outcome is unknown says so, and keeps the clipboard claimed"
   const tool = createEmailDraftTool("mailto");
   const draft = { to: ["josh@example.com"], subject: "Recap", body: "word ".repeat(600) };
 
-  const first = await tool.execute(draft, scope.createContext("1"));
-  const second = await tool.execute(draft, scope.createContext("2"));
+  const first = await tool.execute(
+    draft,
+    scope.createContext({ messageId: "m1", toolCallId: "1" })
+  );
+  const second = await tool.execute(
+    draft,
+    scope.createContext({ messageId: "m1", toolCallId: "2" })
+  );
 
   assert.equal(first.data.status, "unknown");
   assert.match(first.data.guidance, /The draft to josh@example\.com may or may not have opened/);
@@ -341,6 +494,41 @@ test("email_draft tells the model when content went to the clipboard", async (t)
     result.displayText,
     "Opened a draft to a@example.com. The subject and body are on your clipboard."
   );
+});
+
+test("email_draft reports an uncertain direct result as unknown, and still holds delivery", async (t) => {
+  installBrowserGlobals(t, {
+    window: {
+      electronAPI: {
+        connectorRunDirect: async () => ({
+          state: "unknown",
+          errorCode: "direct_failed",
+          message: "That action may have gone through. Ask the user to check before trying again.",
+        }),
+      },
+    },
+  });
+  const { createEmailDraftTool } = await loadEmail();
+  let held = 0;
+  const context = {
+    messageId: "m1",
+    toolCallId: "call-1",
+    signal: new AbortController().signal,
+    onApprovalRequested() {},
+    onHoldDelivery() {
+      held += 1;
+    },
+    claimTurnSlot: () => true,
+  };
+
+  const result = await createEmailDraftTool("mailto").execute(
+    { to: ["a@example.com"], subject: "s", body: "b" },
+    context
+  );
+
+  assert.equal(result.data.status, "unknown");
+  assert.equal(result.data.destination, "a@example.com");
+  assert.equal(held, 1);
 });
 
 test("email_draft guidance names exactly what went to the clipboard", async (t) => {
@@ -683,4 +871,8 @@ test("the system prompt adds connector rules only when a connector tool is prese
   // A corrected retry or a find_contact follow-up needs no question first.
   assert.doesNotMatch(withEmail, /ask the user before calling it again/);
   assert.doesNotMatch(withoutEmail, /needs_clarification/);
+
+  const withSlack = getAgentSystemPrompt(["slack_send_message"]);
+  assert.match(withSlack, /Use slack_send_message/);
+  assert.match(withSlack, /needs_clarification/);
 });

@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+const { memoryCredentials } = require("./slackFixtures");
+
 const loadManager = () => import("../../../src/helpers/connectors/connectorManager.js");
 const loadPending = () => import("../../../src/helpers/connectors/pendingActions.js");
 
@@ -8,6 +10,7 @@ const silentLogger = { info() {}, warn() {}, error() {} };
 
 const ACCOUNT = "account-a";
 const ALLOWED = { policyState: "allowed", accountId: ACCOUNT };
+const SIGNED_OUT = { policyState: "signed_out", accountId: null };
 
 function deferred() {
   let resolve;
@@ -73,8 +76,8 @@ function fakeConnector(overrides = {}) {
     async getBinding() {
       return binding;
     },
-    async prepare(action, args) {
-      calls.prepare.push({ action, args });
+    async prepare(action, args, context) {
+      calls.prepare.push({ action, args, context });
       return {
         status: "ready",
         payload: { channel: "C1", text: args.text },
@@ -86,8 +89,8 @@ function fakeConnector(overrides = {}) {
         },
       };
     },
-    async commit(action, payload, edits) {
-      calls.commit.push({ action, payload, edits });
+    async commit(action, payload, edits, context) {
+      calls.commit.push({ action, payload, edits, context });
       return { state: "sent", url: "https://example.test/p/1" };
     },
     async runDirect(action, args, runtime) {
@@ -105,7 +108,7 @@ function fakeConnector(overrides = {}) {
   };
 }
 
-async function setup(connectorOverrides, logOptions, pendingOptions) {
+async function setup(connectorOverrides, logOptions, managerOptions = {}) {
   const [{ createConnectorManager }, { createPendingActions }] = await Promise.all([
     loadManager(),
     loadPending(),
@@ -114,9 +117,11 @@ async function setup(connectorOverrides, logOptions, pendingOptions) {
   const log = fakeLog(logOptions);
   const manager = createConnectorManager({
     connectors: [fake.connector],
-    pendingActions: createPendingActions(pendingOptions),
+    pendingActions: createPendingActions(),
     actionLog: log,
     logger: silentLogger,
+    getAccountId: () => "acct-1",
+    ...managerOptions,
   });
   return { manager, fake, log };
 }
@@ -180,10 +185,10 @@ test("a blocked or unavailable policy refuses prepare, commit and runDirect", as
 
   const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
   assert.deepEqual(
-    await manager.commit(actionId, {}, { policyState: "unavailable", accountId: ACCOUNT }),
+    await manager.commit(actionId, {}, { policyState: "blocked", accountId: ACCOUNT }),
     {
       state: "not_sent",
-      reason: "policy_unavailable",
+      reason: "policy_blocked",
     }
   );
   assert.equal(fake.calls.commit.length, 0);
@@ -202,6 +207,60 @@ test("a blocked or unavailable policy refuses prepare, commit and runDirect", as
       reason: "policy_unavailable",
     }
   );
+});
+
+test("an unavailable policy at Send leaves the action pending for another try", async () => {
+  const { manager, fake, log } = await setup();
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+
+  assert.deepEqual(
+    await manager.commit(prepared.actionId, {}, { policyState: "unavailable", accountId: ACCOUNT }),
+    {
+      state: "not_sent",
+      reason: "policy_unavailable",
+      retryable: true,
+    }
+  );
+  assert.equal(log.rows.get(prepared.actionId).state, "pending");
+  assert.equal(fake.calls.commit.length, 0);
+
+  const sent = await manager.commit(prepared.actionId, {}, ALLOWED);
+  assert.equal(sent.state, "sent");
+  assert.equal(fake.calls.commit.length, 1);
+});
+
+test("signed out refuses every action, and an unknown state fails closed", async () => {
+  const { manager, fake, log } = await setup();
+
+  assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, SIGNED_OUT), {
+    status: "unavailable",
+    reason: "signed_out",
+  });
+  assert.deepEqual(await manager.runDirect("fake", "draft", {}, SIGNED_OUT, {}), {
+    state: "unavailable",
+    reason: "signed_out",
+  });
+  assert.deepEqual(
+    await manager.prepare(
+      "fake",
+      "post",
+      { text: "hi" },
+      { policyState: "weird", accountId: ACCOUNT }
+    ),
+    {
+      status: "unavailable",
+      reason: "policy_unavailable",
+    }
+  );
+  assert.equal(fake.calls.prepare.length + fake.calls.runDirect.length, 0);
+
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+  assert.deepEqual(await manager.commit(prepared.actionId, {}, SIGNED_OUT), {
+    state: "not_sent",
+    reason: "signed_out",
+  });
+  assert.equal(log.rows.get(prepared.actionId).state, "cancelled");
+  assert.equal(fake.calls.commit.length, 0);
 });
 
 test("a connection change between prepare and commit refuses the send", async () => {
@@ -244,6 +303,34 @@ test("a connector commit resolving undefined is recorded as unknown and never or
     state: "not_sent",
     reason: "not_found",
   });
+});
+
+test("an unknown commit keeps its errorCode on the receipt and in the finish log", async () => {
+  const logger = recordingLogger();
+  const checkUrl = "https://app.slack.com/client/T1/C1";
+  const { manager, log } = await setup(
+    {
+      async commit() {
+        return { state: "unknown", errorCode: "internal_error", checkUrl };
+      },
+    },
+    undefined,
+    { logger }
+  );
+  const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
+
+  assert.deepEqual(await manager.commit(actionId, {}, ALLOWED), {
+    state: "unknown",
+    checkUrl,
+    errorCode: "internal_error",
+  });
+  const row = log.rows.get(actionId);
+  assert.equal(row.state, "unknown");
+  assert.equal(row.errorCode, "internal_error");
+  assert.equal(row.resultUrl, checkUrl);
+  const finished = logger.lines.find((line) => line.args[0] === "connector action finished");
+  assert.equal(finished.args[1].state, "unknown");
+  assert.equal(finished.args[1].errorCode, "internal_error");
 });
 
 test("a connector commit resolving an unrecognized state is recorded as unknown", async () => {
@@ -363,7 +450,13 @@ test("a connector lookup that throws never hands its error to the renderer", asy
     reason: "not_connected",
   });
   assert.deepEqual(await bindingThrows.manager.status(), [
-    { id: "fake", connected: false, accountLabel: null },
+    {
+      id: "fake",
+      connected: false,
+      accountLabel: null,
+      workspaceLabel: null,
+      needsReconnect: false,
+    },
   ]);
 
   const { manager, fake, log } = await setup();
@@ -380,9 +473,13 @@ test("a connector lookup that throws never hands its error to the renderer", asy
 });
 
 test("expired pending actions are swept and recorded as expired on the next call", async () => {
-  const { PENDING_TTL_MS } = await loadPending();
+  const { PENDING_TTL_MS, createPendingActions } = await loadPending();
   let clock = 1_000;
-  const { manager, log } = await setup({}, {}, { now: () => clock });
+  const { manager, log } = await setup(
+    {},
+    {},
+    { pendingActions: createPendingActions({ now: () => clock }) }
+  );
   const { actionId } = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
 
   clock += PENDING_TTL_MS + 1;
@@ -592,6 +689,712 @@ test("invalidate during a gated commit cancels the action without overwriting it
   assert.equal(row.errorCode, "connection_changed");
 });
 
+function recordingLogger() {
+  const lines = [];
+  const capture =
+    (level) =>
+    (...args) =>
+      lines.push({ level, args });
+  return { lines, info: capture("info"), warn: capture("warn"), error: capture("error") };
+}
+
+test("connector logs carry error names and codes, never messages", async () => {
+  const logger = recordingLogger();
+  const leaky = () =>
+    Object.assign(
+      new Error("POST https://slack.com/api/chat.postMessage?token=xoxp-secret failed"),
+      {
+        code: "ECONNRESET",
+      }
+    );
+
+  const throwing = await setup(
+    {
+      async prepare() {
+        throw leaky();
+      },
+      async runDirect() {
+        throw leaky();
+      },
+    },
+    undefined,
+    { logger }
+  );
+  await throwing.manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+  await throwing.manager.runDirect("fake", "draft", {}, ALLOWED, {});
+
+  const committing = await setup(
+    {
+      async commit() {
+        throw leaky();
+      },
+    },
+    undefined,
+    { logger }
+  );
+  const prepared = await committing.manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+  await committing.manager.commit(prepared.actionId, {}, ALLOWED);
+
+  const logged = JSON.stringify(logger.lines);
+  assert.doesNotMatch(logged, /xoxp-secret|slack\.com/);
+  assert.match(logged, /ECONNRESET/);
+});
+
+const VALID_PREVIEW = {
+  verbKey: "default",
+  destinationLabel: "#eng",
+  accountLabel: "chad",
+  body: "hi",
+};
+const NOT_CONNECTED = {
+  connected: false,
+  accountLabel: null,
+  workspaceLabel: null,
+  needsReconnect: false,
+};
+
+test("a malformed prepare result fails closed with no card and no receipt", async () => {
+  for (const bad of [
+    undefined,
+    null,
+    { status: "ready" },
+    { status: "ready", payload: {}, preview: { verbKey: "default" } },
+    { status: "weird" },
+    { status: "needs_clarification" },
+  ]) {
+    const { manager, log } = await setup({
+      async prepare() {
+        return bad;
+      },
+    });
+    assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, ALLOWED), {
+      status: "failed",
+      errorCode: "invalid_result",
+      message: "Couldn't prepare that action.",
+    });
+    assert.equal(log.rows.size, 0);
+  }
+
+  // A failure the connector reported stays a failure, with the default code
+  // and message filled in.
+  const { manager, log } = await setup({
+    async prepare() {
+      return { status: "failed" };
+    },
+  });
+  assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, ALLOWED), {
+    status: "failed",
+    errorCode: "prepare_failed",
+    message: "Couldn't prepare that action.",
+  });
+  assert.equal(log.rows.size, 0);
+});
+
+test("a well-formed clarification keeps only its string candidates", async () => {
+  const { manager } = await setup({
+    async prepare() {
+      return {
+        status: "needs_clarification",
+        message: "Which one?",
+        candidates: ["A", 7, null, "B"],
+      };
+    },
+  });
+  assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, ALLOWED), {
+    status: "needs_clarification",
+    message: "Which one?",
+    candidates: ["A", "B"],
+  });
+});
+
+test("a status or binding that throws or is malformed reads as not connected", async () => {
+  const throwing = await setup({
+    async getStatus() {
+      throw new Error("disk");
+    },
+    async getBinding() {
+      throw new Error("disk");
+    },
+  });
+  assert.deepEqual(await throwing.manager.status(), [{ id: "fake", ...NOT_CONNECTED }]);
+  assert.deepEqual(await throwing.manager.prepare("fake", "post", { text: "hi" }, ALLOWED), {
+    status: "unavailable",
+    reason: "not_connected",
+  });
+
+  const malformed = await setup({
+    async getStatus() {
+      return { connected: "yes", accountLabel: 7 };
+    },
+    async getBinding() {
+      return { accountId: 42 };
+    },
+  });
+  assert.deepEqual((await malformed.manager.status())[0], { id: "fake", ...NOT_CONNECTED });
+  assert.equal(
+    (await malformed.manager.prepare("fake", "post", { text: "hi" }, ALLOWED)).reason,
+    "not_connected"
+  );
+});
+
+test("the main process expires a card nobody answered, but never a committing one", async () => {
+  const { createPendingActions } = await loadPending();
+  const clock = { now: 1_000 };
+  let finishSend;
+  const { manager, fake, log } = await setup(
+    {
+      commit(action, payload, edits) {
+        fake.calls.commit.push({ action, payload, edits });
+        return new Promise((resolve) => {
+          finishSend = resolve;
+        });
+      },
+    },
+    undefined,
+    { pendingActions: createPendingActions({ now: () => clock.now }) }
+  );
+  const abandoned = await manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+  const sending = await manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+  const inFlight = manager.commit(sending.actionId, {}, ALLOWED);
+  // Let commit's own await (fetching the binding to guard beginCommit) settle
+  // and flip the entry to "committing" before the sweep runs, the same way an
+  // in-flight IPC call would have already reserved it by the time a real
+  // 60s-interval sweep landed.
+  await new Promise((resolve) => setImmediate(resolve));
+
+  clock.now += 10 * 60 * 1000 + 1;
+  manager.sweepExpired();
+
+  assert.equal(log.rows.get(abandoned.actionId).state, "expired");
+  assert.equal(log.rows.get(sending.actionId).state, "committing");
+  finishSend({ state: "sent" });
+  assert.equal((await inFlight).state, "sent");
+  assert.deepEqual(await manager.commit(abandoned.actionId, {}, ALLOWED), {
+    state: "not_sent",
+    reason: "not_found",
+  });
+  assert.equal(fake.calls.commit.length, 1);
+});
+
+test("receipts carry the account, and no account means no action", async () => {
+  const { manager, fake, log } = await setup();
+  const signedIn = { policyState: "allowed", accountId: "acct-1" };
+
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, signedIn);
+  assert.equal(log.rows.get(prepared.actionId).accountId, "acct-1");
+  await manager.runDirect("fake", "draft", {}, signedIn, {});
+  assert.ok([...log.rows.values()].every((row) => row.accountId === "acct-1"));
+  assert.equal(manager.recentActions("fake", 10, "acct-1").length, 2);
+
+  // Signed in, but no account could be pinned to the call (a signed-out call
+  // is refused as signed_out by the policy check first).
+  const noAccount = { policyState: "allowed", accountId: null };
+  assert.deepEqual(await manager.prepare("fake", "post", { text: "hi" }, noAccount), {
+    status: "failed",
+    errorCode: "receipt_unavailable",
+    message: "Couldn't record this action, so nothing was prepared.",
+  });
+  assert.deepEqual(await manager.runDirect("fake", "draft", {}, noAccount, {}), {
+    state: "unavailable",
+    reason: "receipt_unavailable",
+  });
+  assert.deepEqual(manager.recentActions("fake", 10, null), []);
+  assert.equal(fake.calls.prepare.length, 1);
+});
+
+test("the connector acts only under the binding the action was prepared with", async () => {
+  const { manager, fake } = await setup();
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+  await manager.commit(prepared.actionId, {}, ALLOWED);
+
+  const binding = { accountId: "U1", workspaceId: "T1", generation: 1 };
+  assert.deepEqual(fake.calls.prepare[0].context, { binding });
+  assert.deepEqual(fake.calls.commit[0].context, { binding });
+});
+
+const connectable = (overrides = {}) => ({
+  async authorize() {
+    return { accessToken: "new" };
+  },
+  async revoke() {},
+  async getStatus() {
+    return { connected: true, accountLabel: "chad", workspaceLabel: "Acme" };
+  },
+  ...overrides,
+});
+
+test("connect saves under the account that started it, cancels old approvals and announces", async () => {
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  const announced = [];
+  const { manager, log } = await setup(connectable(), undefined, {
+    credentials,
+    onStatusChanged: (statuses) => announced.push(statuses),
+  });
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+
+  assert.deepEqual(await manager.connect("fake", "allowed"), {
+    status: "connected",
+    accountLabel: "chad",
+    workspaceLabel: "Acme",
+  });
+  assert.deepEqual(credentials.read("acct-1", "fake"), {
+    credential: { accessToken: "new" },
+    generation: 1,
+  });
+  assert.equal(log.rows.get(prepared.actionId).state, "cancelled");
+  assert.equal(announced.length, 1);
+});
+
+test("an account switch during the OAuth round trip saves nothing and revokes the new login", async () => {
+  let accountId = "acct-a";
+  const credentials = memoryCredentials();
+  const flow = deferred();
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      authorize: () => flow.promise,
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials, getAccountId: () => accountId }
+  );
+
+  const connecting = manager.connect("fake", "allowed");
+  accountId = "acct-b";
+  flow.resolve({ accessToken: "a-login" });
+
+  assert.deepEqual(await connecting, { status: "failed", errorCode: "connection_changed" });
+  assert.equal(credentials.read("acct-a", "fake"), null);
+  assert.equal(credentials.read("acct-b", "fake"), null);
+  assert.deepEqual(revoked, [{ accessToken: "a-login" }]);
+});
+
+test("a login that changed during the round trip is kept, and the late one is revoked", async () => {
+  const credentials = memoryCredentials();
+  const flow = deferred();
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      authorize: () => flow.promise,
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials }
+  );
+
+  const connecting = manager.connect("fake", "allowed");
+  credentials.replace("acct-1", "fake", { accessToken: "other-window" }, 0);
+  flow.resolve({ accessToken: "late" });
+
+  assert.deepEqual(await connecting, { status: "failed", errorCode: "connection_changed" });
+  assert.equal(credentials.read("acct-1", "fake").credential.accessToken, "other-window");
+  assert.deepEqual(revoked, [{ accessToken: "late" }]);
+});
+
+// The real loopback flow, with Electron's shell stubbed out.
+function loadLoopbackFlow() {
+  const Module = require("node:module");
+  const originalLoad = Module._load;
+  Module._load = function loadWithElectronStub(request, parent, isMain) {
+    if (request === "electron") return { shell: { openExternal: async () => {} } };
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  try {
+    return require("../../../src/helpers/oauthLoopbackFlow.js");
+  } finally {
+    Module._load = originalLoad;
+  }
+}
+
+async function until(read) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (read()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("timed out waiting");
+}
+
+test("a second Connect cancels the abandoned sign-in, and only the new login is saved", async () => {
+  const { runOAuthLoopbackFlow } = loadLoopbackFlow();
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  const launches = [];
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      authorize: ({ signal } = {}) =>
+        runOAuthLoopbackFlow({
+          errorParam: "fake_error",
+          signal,
+          renderResultPage: () => "done",
+          buildAuthUrl: (redirectUri, state) => {
+            launches.push({ redirectUri, state });
+            return "https://example.test/authorize";
+          },
+          handleCallback: async (code) => ({ accessToken: code }),
+        }),
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials }
+  );
+
+  const first = manager.connect("fake", "allowed");
+  await until(() => launches.length === 1);
+  const second = manager.connect("fake", "allowed");
+
+  assert.deepEqual(await first, { status: "failed", errorCode: "oauth_cancelled" });
+  await until(() => launches.length === 2);
+  const [abandoned, current] = launches;
+  // The abandoned tab's server is gone.
+  await assert.rejects(fetch(`${abandoned.redirectUri}/?code=late&state=${abandoned.state}`));
+  await fetch(`${current.redirectUri}/?code=second&state=${current.state}`);
+
+  assert.equal((await second).status, "connected");
+  assert.deepEqual(credentials.read("acct-1", "fake").credential, { accessToken: "second" });
+  assert.equal(launches.length, 2, "one browser launch per attempt");
+  assert.deepEqual(revoked, [], "nothing was revoked for the cancelled attempt");
+});
+
+test("a sign-in that finishes after a newer Connect replaced it is revoked, never saved", async () => {
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  const flows = [];
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      // Like a flow whose provider answered before the abort: it resolves.
+      authorize: () => {
+        const flow = deferred();
+        flows.push(flow);
+        return flow.promise;
+      },
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials }
+  );
+
+  const first = manager.connect("fake", "allowed");
+  const second = manager.connect("fake", "allowed");
+  flows[0].resolve({ accessToken: "late" });
+
+  assert.deepEqual(await first, { status: "failed", errorCode: "oauth_cancelled" });
+  assert.deepEqual(revoked, [{ accessToken: "late" }]);
+  assert.equal(credentials.read("acct-1", "fake"), null);
+
+  flows[1].resolve({ accessToken: "second" });
+  assert.equal((await second).status, "connected");
+  assert.deepEqual(credentials.read("acct-1", "fake").credential, { accessToken: "second" });
+});
+
+test("connect refuses on policy or no account, and reports flow errors by code", async () => {
+  const credentials = memoryCredentials();
+  const refusing = await setup(connectable(), undefined, { credentials });
+  assert.deepEqual(await refusing.manager.connect("fake", "blocked"), {
+    status: "unavailable",
+    reason: "policy_blocked",
+  });
+
+  const signedOut = await setup(connectable(), undefined, {
+    credentials,
+    getAccountId: () => null,
+  });
+  assert.deepEqual(await signedOut.manager.connect("fake", "allowed"), {
+    status: "unavailable",
+    reason: "signed_out",
+  });
+
+  for (const [thrown, errorCode] of [
+    [Object.assign(new Error("OAuth flow timed out"), { code: "oauth_timeout" }), "oauth_timeout"],
+    [
+      Object.assign(new Error("x"), { redirectCode: "token_exchange_failed" }),
+      "token_exchange_failed",
+    ],
+    [new Error("GET https://slack.com/api/oauth.v2.access?code=secret failed"), "connect_failed"],
+  ]) {
+    const failing = await setup(
+      connectable({
+        async authorize() {
+          throw thrown;
+        },
+      }),
+      undefined,
+      { credentials }
+    );
+    assert.deepEqual(await failing.manager.connect("fake", "allowed"), {
+      status: "failed",
+      errorCode,
+    });
+  }
+  assert.equal(credentials.read("acct-1", "fake"), null);
+});
+
+test("connect whose credential save fails for a real reason (not a race) logs it, revokes the new login, and reports credential_save_failed", async () => {
+  const logger = recordingLogger();
+  const credentials = memoryCredentials(null, { connectorId: "fake" });
+  credentials.replace = () => {
+    throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+  };
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials, logger }
+  );
+
+  assert.deepEqual(await manager.connect("fake", "allowed"), {
+    status: "failed",
+    errorCode: "credential_save_failed",
+  });
+  assert.deepEqual(revoked, [{ accessToken: "new" }]);
+  const warnings = logger.lines.filter((line) => line.level === "warn");
+  assert.equal(warnings.length, 1);
+  const logged = JSON.stringify(warnings);
+  assert.match(logged, /EIO/);
+  assert.doesNotMatch(logged, /accessToken/);
+});
+
+test("disconnect revokes the stored login, clears it, cancels and announces; a failed revoke still disconnects", async () => {
+  const credentials = memoryCredentials(
+    { accessToken: "t", refreshToken: "r" },
+    { connectorId: "fake" }
+  );
+  const revoked = [];
+  const announced = [];
+  const { manager, log } = await setup(
+    connectable({
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials, onStatusChanged: (statuses) => announced.push(statuses) }
+  );
+  const prepared = await manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+
+  assert.deepEqual(await manager.disconnect("fake"), { status: "disconnected" });
+  assert.deepEqual(revoked, [{ accessToken: "t", refreshToken: "r" }]);
+  assert.equal(credentials.read("acct-1", "fake"), null);
+  assert.equal(log.rows.get(prepared.actionId).state, "cancelled");
+  assert.equal(announced.length, 1);
+
+  const offline = await setup(
+    connectable({
+      async revoke() {
+        throw new Error("offline");
+      },
+    }),
+    undefined,
+    { credentials: memoryCredentials({ accessToken: "t" }, { connectorId: "fake" }) }
+  );
+  assert.deepEqual(await offline.manager.disconnect("fake"), { status: "disconnected" });
+});
+
+test("a disconnect never deletes a login connected while it was revoking", async () => {
+  const credentials = memoryCredentials({ accessToken: "old" }, { connectorId: "fake" });
+  const revoking = deferred();
+  const { manager } = await setup(connectable({ revoke: () => revoking.promise }), undefined, {
+    credentials,
+  });
+
+  const disconnecting = manager.disconnect("fake");
+  credentials.replace("acct-1", "fake", { accessToken: "new" }, 1);
+  revoking.resolve();
+
+  assert.deepEqual(await disconnecting, { status: "failed", errorCode: "connection_changed" });
+  assert.equal(credentials.read("acct-1", "fake").credential.accessToken, "new");
+});
+
+test("disconnect whose credential clear fails for a real reason (not a race) logs it and reports disconnect_failed", async () => {
+  const logger = recordingLogger();
+  const credentials = memoryCredentials({ accessToken: "t" }, { connectorId: "fake" });
+  credentials.clear = () => {
+    throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+  };
+  const revoked = [];
+  const { manager } = await setup(
+    connectable({
+      async revoke(credential) {
+        revoked.push(credential);
+      },
+    }),
+    undefined,
+    { credentials, logger }
+  );
+
+  assert.deepEqual(await manager.disconnect("fake"), {
+    status: "failed",
+    errorCode: "disconnect_failed",
+  });
+  // The revoke already happened; the local slot wasn't cleared, so it isn't
+  // pretended away.
+  assert.deepEqual(revoked, [{ accessToken: "t" }]);
+  assert.deepEqual(credentials.read("acct-1", "fake"), {
+    credential: { accessToken: "t" },
+    generation: 1,
+  });
+  const warnings = logger.lines.filter((line) => line.level === "warn");
+  assert.equal(warnings.length, 1);
+  const logged = JSON.stringify(warnings);
+  assert.match(logged, /EPERM/);
+  assert.doesNotMatch(logged, /accessToken/);
+});
+
+function loadAccountScopeBinding() {
+  const Module = require("node:module");
+  const originalLoad = Module._load;
+  Module._load = function loadWithElectronStub(request, parent, isMain) {
+    if (request === "electron") return { app: { getPath: () => require("node:os").tmpdir() } };
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  try {
+    return require("../../../src/helpers/accountScopeBinding.js");
+  } finally {
+    Module._load = originalLoad;
+  }
+}
+
+// connectorCredentials over an in-memory store.
+function memoryStore() {
+  const slots = new Map();
+  const generations = new Map();
+  const bump = (slot) => generations.set(slot, (generations.get(slot) ?? 0) + 1);
+  return {
+    getGeneration: (slot) => generations.get(slot) ?? 0,
+    read: (slot) => slots.get(slot) ?? null,
+    replace: (slot, credential) => {
+      slots.set(slot, credential);
+      bump(slot);
+    },
+    save: (slot, credential) => slots.set(slot, credential),
+    clear: (slot) => {
+      slots.delete(slot);
+      bump(slot);
+    },
+  };
+}
+
+test("logins are filed under the account the credential in use is bound to, as receipts are", async () => {
+  const { resolveActiveAccountScope, hashToken } = loadAccountScopeBinding();
+  const { connectorAccountIdFrom } = require("../../../src/helpers/connectors/connectorIpc.js");
+  const {
+    createConnectorCredentials,
+  } = require("../../../src/helpers/connectors/connectorCredentials.js");
+  // What main.js used to read: it doesn't move when one signed-in token
+  // replaces another.
+  const databaseManager = { activeAccountId: "account-a" };
+  const tokenState = { token: "token-b", generation: 2 };
+  let binding = null;
+  const getAccountId = connectorAccountIdFrom(() =>
+    resolveActiveAccountScope({ ...tokenState, binding })
+  );
+  const credentials = createConnectorCredentials({ store: memoryStore(), getAccountId });
+  let authorized = 0;
+  const { manager } = await setup(
+    connectable({
+      async authorize() {
+        authorized += 1;
+        return { accessToken: "b-login" };
+      },
+    }),
+    undefined,
+    { credentials, getAccountId }
+  );
+
+  // No validated scope for the token in use: refused before any sign-in.
+  assert.deepEqual(await manager.connect("fake", "allowed"), {
+    status: "unavailable",
+    reason: "signed_out",
+  });
+  assert.equal(authorized, 0);
+  assert.equal(credentials.read(databaseManager.activeAccountId, "fake"), null);
+
+  binding = { version: 1, accountId: "account-b", tokenHash: hashToken("token-b") };
+  assert.equal((await manager.connect("fake", "allowed")).status, "connected");
+  assert.deepEqual(credentials.read("account-b", "fake").credential, { accessToken: "b-login" });
+  assert.equal(credentials.read(databaseManager.activeAccountId, "fake"), null);
+});
+
+test("main files connector logins under the credential's account scope, not the database scope", () => {
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../../../main.js"),
+    "utf8"
+  );
+  const wiring = source.match(
+    /const getConnectorAccountScope = ([\s\S]*?)\n\s+const connectorCredentials/
+  );
+  assert.ok(wiring, "main.js defines the connector account lookup");
+  assert.match(wiring[1], /accountScopeBinding\.resolveActiveAccountScope\(/);
+  assert.match(wiring[1], /require\("\.\/src\/helpers\/tokenStore"\)\.getState\(\)/);
+  assert.match(
+    wiring[1],
+    /getConnectorAccountId = connectorAccountIdFrom\(getConnectorAccountScope\)/
+  );
+  assert.doesNotMatch(wiring[1], /databaseManager\.activeAccountId/);
+});
+
+test("disconnectAll disconnects every connector that can revoke", async () => {
+  const credentials = memoryCredentials({ accessToken: "t" }, { connectorId: "fake" });
+  const { manager } = await setup(connectable(), undefined, { credentials });
+  await manager.disconnectAll();
+  assert.equal(credentials.read("acct-1", "fake"), null);
+});
+
+test("only the newest status change is announced", async () => {
+  const announced = [];
+  const slowFirst = deferred();
+  let reads = 0;
+  const { manager } = await setup(
+    {
+      getStatus: () => {
+        reads += 1;
+        return reads === 1
+          ? slowFirst.promise
+          : Promise.resolve({ connected: false, accountLabel: null });
+      },
+    },
+    undefined,
+    { onStatusChanged: (statuses) => announced.push(statuses[0].connected) }
+  );
+
+  const older = manager.notifyStatusChanged();
+  const newer = manager.notifyStatusChanged();
+  await newer;
+  slowFirst.resolve({ connected: true, accountLabel: "chad" });
+  await older;
+
+  assert.deepEqual(announced, [false]);
+});
+
+test("a reconnect_needed result announces the status change", async () => {
+  const announced = [];
+  const { manager } = await setup(
+    {
+      async prepare() {
+        return { status: "failed", errorCode: "reconnect_needed", message: "Reconnect Slack." };
+      },
+    },
+    undefined,
+    { onStatusChanged: (statuses) => announced.push(statuses) }
+  );
+
+  await manager.prepare("fake", "post", { text: "hi" }, ALLOWED);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(announced.length, 1);
+});
+
 test("an action with no resolvable account is refused before any receipt or side effect", async () => {
   const { manager, fake, log } = await setup();
   const signedOut = { policyState: "allowed", accountId: null };
@@ -664,9 +1467,13 @@ test("a commit refused by policy withdraws the action for good", async () => {
 });
 
 test("prepare and commit each sweep other expired actions", async () => {
-  const { PENDING_TTL_MS } = await loadPending();
+  const { PENDING_TTL_MS, createPendingActions } = await loadPending();
   let clock = 1_000;
-  const { manager, log } = await setup({}, {}, { now: () => clock });
+  const { manager, log } = await setup(
+    {},
+    {},
+    { pendingActions: createPendingActions({ now: () => clock }) }
+  );
 
   const stale = await manager.prepare("fake", "post", { text: "x" }, ALLOWED);
   clock += PENDING_TTL_MS + 1;

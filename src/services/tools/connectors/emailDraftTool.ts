@@ -164,6 +164,7 @@ export function createEmailDraftTool(target: EmailDraftTarget): ToolDefinition {
       if (result.state === "unknown") {
         if (clipboardReserved) preserveClipboard();
         return unknownResult(
+          to.join(", "),
           `The draft to ${destination} may or may not have opened. Ask the user to check for a draft window.`,
           i18n.t("connectors.toolStatus.draftUnknown", { destination })
         );

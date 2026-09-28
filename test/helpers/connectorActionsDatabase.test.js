@@ -234,6 +234,46 @@ test("listRecent respects the limit", (t) => {
   db.db.close();
 });
 
+test("receipts list only for their account and go with it on account deletion", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+  const log = createActionLog(db);
+  db.setActiveAccountId("acct-a");
+
+  log.insert({
+    id: "a1",
+    accountId: "acct-a",
+    connector: "slack",
+    action: "send_message",
+    kind: "approval",
+    destinationLabel: "#eng",
+    state: "sent",
+  });
+  log.insert({
+    id: "b1",
+    accountId: "acct-b",
+    connector: "slack",
+    action: "send_message",
+    kind: "approval",
+    destinationLabel: "#ops",
+    state: "sent",
+  });
+
+  assert.deepEqual(
+    log.listRecent("slack", 10, "acct-a").map((row) => row.id),
+    ["a1"]
+  );
+  assert.deepEqual(log.listRecent("slack", 10, null), []);
+
+  db.deleteAccountData("acct-a");
+  assert.deepEqual(log.listRecent("slack", 10, "acct-a"), []);
+  assert.deepEqual(
+    log.listRecent("slack", 10, "acct-b").map((row) => row.id),
+    ["b1"]
+  );
+  db.db.close();
+});
+
 test("contact lookup sources cover meetings, synced contacts and the user's accounts", (t) => {
   const db = createDb(t);
   if (!db) return;

@@ -12,6 +12,18 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+// Connectors must tell "signed out" ({}) from "can't tell" (null). Without a
+// bearer token only the sender's window can read the cookie session, so a
+// window that is already gone must not read as signed out.
+function createConnectorAuthLookup({ hasBearerToken, windowFor, authHeaderFor }) {
+  return async (event) => {
+    if (hasBearerToken()) return authHeaderFor(null);
+    const win = windowFor(event);
+    if (!win || win.isDestroyed()) return null;
+    return authHeaderFor(win);
+  };
+}
+
 function createConnectorPolicyResolver({
   getAuthHeader,
   getPolicy,
@@ -24,13 +36,15 @@ function createConnectorPolicyResolver({
   return async (event) => {
     let request = null;
     const resolution = (async () => {
-      // Read before the (possibly async cookie) header lookup: a sign-in
-      // during it must fail the generation check, not pair old headers with
-      // the new generation.
+      // Read before the lookup: a sign-in or sign-out during it then fails
+      // the policy fetch's generation check instead of passing it.
       const expectedAuthGeneration = getAuthGeneration();
-      const authHeaders = (await getAuthHeader(event)) || {};
-      // No account means no org policy can apply (same rule as screen context).
-      if (!authHeaders.Authorization && !authHeaders.Cookie) return "allowed";
+      const authHeaders = await getAuthHeader(event);
+      if (!authHeaders || typeof authHeaders !== "object") return "unavailable";
+      // Connector logins outlive an OpenWhispr sign-out, so no account means
+      // no action (unlike screen context, where signed out is allowed).
+      if (!authHeaders.Authorization && !authHeaders.Cookie) return "signed_out";
+      // Assigned before the fetch: the deadline's fallback peeks this request.
       request = { expectedAuthGeneration, authHeaders };
       const snapshot = await getPolicy(request);
       return connectorPolicyState(snapshot);
@@ -54,6 +68,13 @@ function createConnectorPolicyResolver({
       clearTimeout(timer);
     }
   };
+}
+
+// Connect, disconnect and the connectors' bindings file logins under the
+// account receipts are filed under: the one getAccountScope() binds to the
+// credential in use, or none.
+function connectorAccountIdFrom(getAccountScope) {
+  return () => getAccountScope()?.accountId ?? null;
 }
 
 function sameAccountScope(left, right) {
@@ -141,6 +162,17 @@ function registerConnectorIpc({ ipcMain, manager, getPolicyState, getAccountScop
     return manager.recentActions(connectorId, limit, getAccountScope()?.accountId ?? null);
   });
 
+  ipcMain.handle("connector-connect", async (event, connectorId) => {
+    if (!isNonEmptyString(connectorId)) return { status: "unavailable", reason: "invalid_request" };
+    return manager.connect(connectorId, await getPolicyState(event));
+  });
+
+  // Removing access is always allowed, so disconnect skips the policy check.
+  ipcMain.handle("connector-disconnect", (_event, connectorId) => {
+    if (!isNonEmptyString(connectorId)) return { status: "unavailable", reason: "invalid_request" };
+    return manager.disconnect(connectorId);
+  });
+
   if (findContacts) {
     // The results go to the model (and its provider), so the org switch
     // applies here too, not just to actions that leave the device.
@@ -155,4 +187,9 @@ function registerConnectorIpc({ ipcMain, manager, getPolicyState, getAccountScop
   }
 }
 
-module.exports = { registerConnectorIpc, createConnectorPolicyResolver };
+module.exports = {
+  registerConnectorIpc,
+  createConnectorPolicyResolver,
+  createConnectorAuthLookup,
+  connectorAccountIdFrom,
+};

@@ -3850,6 +3850,7 @@
       "search_notesName": "Rechercher des notes",
       "email_draftName": "Brouillon d'e-mail",
       "find_contactName": "Rechercher un contact",
+      "slack_send_messageName": "Message Slack",
       "get_noteName": "Obtenir une note",
       "create_noteName": "Créer une note",
       "update_noteName": "Mettre à jour une note",
@@ -3864,6 +3865,7 @@
       "search_notesStatus": "Recherche de notes...",
       "email_draftStatus": "Ouverture d'un brouillon d'e-mail...",
       "find_contactStatus": "Recherche de contacts...",
+      "slack_send_messageStatus": "Préparation d'un message Slack...",
       "web_searchStatus": "Recherche sur le web...",
       "copy_to_clipboardStatus": "Copie dans le presse-papiers...",
       "get_calendar_eventsStatus": "Vérification du calendrier...",
@@ -4019,7 +4021,8 @@
   "connectors": {
     "approval": {
       "headers": {
-        "default": "Envoyer à {{destination}}"
+        "default": "Envoyer à {{destination}}",
+        "slackPost": "Publier dans {{destination}}"
       },
       "identity": "En tant que {{account}}",
       "identityWithWorkspace": "En tant que {{account}} dans {{workspace}}",
@@ -4035,7 +4038,24 @@
       "failed": "Échec de l'envoi : {{message}}",
       "unknown": "Impossible de confirmer l'envoi. Vérifiez {{destination}}.",
       "cancelled": "Annulé. Rien n'a été envoyé.",
-      "notSent": "Non envoyé."
+      "notSent": "Non envoyé.",
+      "policyRetry": "Impossible de vérifier les paramètres de votre organisation, rien n'a donc été envoyé. Cliquez sur Envoyer pour réessayer.",
+      "errors": {
+        "not_in_channel": "Vous n'êtes pas membre de {{destination}}.",
+        "channel_not_found": "{{destination}} n'a pas pu être retrouvé dans Slack.",
+        "is_archived": "{{destination}} est archivé.",
+        "reconnect_needed": "Slack doit être reconnecté dans les Paramètres.",
+        "connection_changed": "La connexion Slack a changé avant l'envoi, donc rien n'a été envoyé.",
+        "rate_limited": "Slack est occupé. Réessayez sous peu.",
+        "missing_scope": "OpenWhispr n'a pas la permission de publier là-bas. Reconnectez Slack dans les Paramètres.",
+        "msg_too_long": "Le message est trop long pour Slack (12 000 caractères maximum, une fois formaté).",
+        "no_text": "Le message est vide.",
+        "network": "Slack est injoignable. Rien n'a été envoyé.",
+        "credential_save_failed": "La connexion Slack n'a pas pu être enregistrée sur cet ordinateur. Rien n'a été envoyé. Réessayez.",
+        "dm_failed": "Le message direct à {{destination}} n'a pas pu être ouvert. Rien n'a été envoyé.",
+        "restricted": "{{destination}} est en lecture seule ou restreint pour vous.",
+        "generic": "Un problème est survenu. Rien n'a été envoyé."
+      }
     },
     "policyOff": "Votre organisation a désactivé les connecteurs.",
     "email": {
@@ -4052,13 +4072,46 @@
         "mailto": "Application de messagerie par défaut"
       }
     },
+    "slack": {
+      "title": "Slack",
+      "description": "L'assistant peut publier des messages dans des canaux et à des personnes en votre nom. Vous approuvez chaque message avant son envoi.",
+      "connect": "Connecter",
+      "reconnect": "Reconnecter",
+      "disconnect": "Déconnecter",
+      "connecting": "Terminez la connexion dans votre navigateur…",
+      "connectedAs": "Connecté en tant que {{account}} dans {{workspace}}",
+      "needsReconnect": "Slack doit être reconnecté.",
+      "proRequired": "Passez à un plan payant pour que l'assistant envoie des messages Slack pour vous.",
+      "errors": {
+        "connect_failed": "Impossible de connecter Slack. Réessayez.",
+        "disconnect_failed": "Impossible de déconnecter Slack. Réessayez.",
+        "oauth_denied": "Slack n'a pas été connecté car l'accès n'a pas été autorisé.",
+        "oauth_timeout": "La connexion a pris trop de temps. Réessayez.",
+        "oauth_state_mismatch": "Ce lien de connexion était périmé. Réessayez.",
+        "ports_busy": "Une autre application utilise les ports dont OpenWhispr a besoin pour se connecter. Fermez-la et réessayez.",
+        "token_exchange_failed": "Slack n'a pas terminé la connexion. Réessayez.",
+        "not_configured": "Slack n'est pas disponible dans cette version.",
+        "connection_changed": "Votre compte ou la connexion Slack a changé pendant la connexion. Réessayez.",
+        "signed_out": "Connectez-vous à OpenWhispr pour connecter Slack.",
+        "policy_blocked": "Votre organisation a désactivé les connecteurs.",
+        "policy_unavailable": "Impossible de vérifier les paramètres de votre organisation. Réessayez."
+      },
+      "browser": {
+        "connectedTitle": "Slack est connecté",
+        "connectedBody": "Vous pouvez fermer cet onglet et retourner à OpenWhispr.",
+        "failedTitle": "Slack n'a pas été connecté",
+        "failedBody": "Retournez à OpenWhispr pour réessayer."
+      }
+    },
     "recent": {
       "title": "Actions récentes",
       "actions": {
-        "email_draft": "Brouillon à {{destination}}"
+        "email_draft": "Brouillon à {{destination}}",
+        "slack_send_message": "Message à {{destination}}"
       },
       "unlabeledActions": {
-        "email_draft": "Brouillon d'e-mail"
+        "email_draft": "Brouillon d'e-mail",
+        "slack_send_message": "Message Slack"
       },
       "states": {
         "pending": "En attente",
@@ -4077,7 +4130,6 @@
       "draftOpenedOnlySubjectCopied": "Brouillon ouvert pour {{destination}}. L'objet est dans votre presse-papiers.",
       "needsDetails": "Il manque des précisions.",
       "unavailable": "Les connecteurs ne sont pas disponibles pour le moment.",
-      "failed": "Cela n'a pas fonctionné.",
       "unknown": "Non confirmé. Vérifiez si l'action a abouti avant de réessayer.",
       "draftUnknown": "Non confirmé : le brouillon pour {{destination}} ne s'est peut-être pas ouvert. Vérifiez avant de réessayer.",
       "contactsFound": "Contacts trouvés : {{total}}",
@@ -4086,7 +4138,21 @@
       "errors": {
         "open_failed": "Impossible d'ouvrir votre application de messagerie.",
         "draft_too_long": "Trop de destinataires pour un lien de brouillon.",
-        "invalid_address": "Des adresses e-mail complètes sont nécessaires."
+        "invalid_address": "Des adresses e-mail complètes sont nécessaires.",
+        "not_in_channel": "Pas membre de ce canal.",
+        "channel_not_found": "Cette conversation est introuvable.",
+        "is_archived": "Ce canal est archivé.",
+        "reconnect_needed": "Slack doit être reconnecté.",
+        "connection_changed": "La connexion Slack a changé. Rien n'a été envoyé.",
+        "rate_limited": "Slack est occupé.",
+        "missing_scope": "Permission Slack manquante.",
+        "msg_too_long": "Message trop long pour Slack.",
+        "no_text": "Le message est vide.",
+        "network": "Impossible de joindre Slack. Rien n'a été envoyé.",
+        "credential_save_failed": "Impossible d'enregistrer la connexion Slack sur cet ordinateur. Rien n'a été envoyé.",
+        "dm_failed": "Impossible d'ouvrir le message direct. Rien n'a été envoyé.",
+        "restricted": "Ce canal est en lecture seule ou restreint.",
+        "generic": "Cela n'a pas fonctionné."
       }
     }
   },

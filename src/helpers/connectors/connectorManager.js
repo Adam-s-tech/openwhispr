@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { describeError } = require("./errorSummary");
 const { policyRefusal } = require("./connectorPolicy");
 
 const CANCEL_REASONS = new Set(["cancelled_by_user", "conversation_ended", "expired"]);
@@ -42,7 +43,10 @@ function normalizeCommitResult(result) {
     case "failed":
       return failedResult(result);
     case "unknown":
-      return { state: "unknown", ...stringFields({ checkUrl: result.checkUrl }) };
+      return {
+        state: "unknown",
+        ...stringFields({ checkUrl: result.checkUrl, errorCode: result.errorCode }),
+      };
     default:
       return { state: "unknown" };
   }
@@ -96,6 +100,15 @@ const RECEIPT_UNAVAILABLE_PREPARE_RESULT = {
   message: "Couldn't record this action, so nothing was prepared.",
 };
 
+// Connecting writes a login for the account, so it needs one.
+function actionRefusal(policyState, accountId) {
+  return policyRefusal(policyState) ?? (accountId ? null : "signed_out");
+}
+
+function isString(value) {
+  return typeof value === "string";
+}
+
 function normalizePreviewNote(note) {
   if (!note || typeof note.key !== "string") return null;
   return note.values && typeof note.values === "object"
@@ -108,11 +121,7 @@ function normalizePreviewNote(note) {
 function normalizePreview(preview) {
   if (!preview || typeof preview !== "object") return null;
   const { verbKey, destinationLabel, accountLabel, body } = preview;
-  if (
-    ![verbKey, destinationLabel, accountLabel, body].every((value) => typeof value === "string")
-  ) {
-    return null;
-  }
+  if (![verbKey, destinationLabel, accountLabel, body].every(isString)) return null;
   return {
     verbKey,
     destinationLabel,
@@ -125,24 +134,27 @@ function normalizePreview(preview) {
   };
 }
 
-// The payload stays in main; only the fields each status defines reach the
-// renderer.
+// A connector's prepare result decides whether a card appears and what it
+// shows, so anything malformed fails closed, with no card and no receipt. The
+// payload stays in main; only the fields each status defines reach the
+// renderer, so a connector can't leak anything else (such as message text)
+// through an odd result.
 function normalizePrepareResult(result) {
   switch (result?.status) {
     case "ready": {
       const preview = normalizePreview(result.preview);
-      return preview
+      return preview && result.payload !== undefined
         ? { status: "ready", payload: result.payload, preview }
         : INVALID_PREPARE_RESULT;
     }
     case "needs_clarification":
-      return {
-        status: "needs_clarification",
-        message: stringOr(result.message, ""),
-        candidates: Array.isArray(result.candidates)
-          ? result.candidates.filter((candidate) => typeof candidate === "string")
-          : [],
-      };
+      return isString(result.message)
+        ? {
+            status: "needs_clarification",
+            message: result.message,
+            candidates: Array.isArray(result.candidates) ? result.candidates.filter(isString) : [],
+          }
+        : INVALID_PREPARE_RESULT;
     case "failed":
       return {
         status: "failed",
@@ -154,6 +166,23 @@ function normalizePrepareResult(result) {
   }
 }
 
+function normalizeStatus(status) {
+  const value = status && typeof status === "object" ? status : {};
+  return {
+    connected: value.connected === true,
+    accountLabel: isString(value.accountLabel) ? value.accountLabel : null,
+    workspaceLabel: isString(value.workspaceLabel) ? value.workspaceLabel : null,
+    needsReconnect: value.needsReconnect === true,
+  };
+}
+
+// A binding that can't be compared counts as no connection.
+function normalizeBinding(binding) {
+  if (!binding || typeof binding !== "object") return null;
+  if (!isString(binding.accountId) || !Number.isInteger(binding.generation)) return null;
+  return binding;
+}
+
 function sanitizeEdits(edits) {
   const clean = {};
   if (edits && typeof edits.title === "string") clean.title = edits.title;
@@ -161,15 +190,39 @@ function sanitizeEdits(edits) {
   return clean;
 }
 
+const REVOKE_TIMEOUT_MS = 5000;
+const CONNECT_ERROR_CODES = new Set([
+  "not_configured",
+  "oauth_denied",
+  "oauth_timeout",
+  "oauth_state_mismatch",
+  "ports_busy",
+  "token_exchange_failed",
+]);
+
+// A revoke is best effort: nothing may hang on an unreachable provider.
+async function withinDeadline(promise, ms) {
+  let timer;
+  try {
+    await Promise.race([promise, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Every action call carries `auth`: the org policy verdict and the signed-in
 // account it was resolved for. The account owns the receipt, so an action
 // with none (signed out, or mid sign-in or account switch) is refused before
-// anything is written or done.
+// anything is written or done. Connecting and disconnecting a login use
+// getAccountId(), the account whose login slot they write.
 function createConnectorManager({
   connectors,
   pendingActions,
   actionLog,
   logger,
+  getAccountId,
+  credentials = null,
+  onStatusChanged = () => {},
   randomId = () => crypto.randomBytes(16).toString("hex"),
 }) {
   const byId = new Map(connectors.map((connector) => [connector.id, connector]));
@@ -180,7 +233,11 @@ function createConnectorManager({
     try {
       return write() !== false;
     } catch (error) {
-      logger.error("connector receipt write failed", { step, error: error.message }, "connectors");
+      logger.error(
+        "connector receipt write failed",
+        { step, ...describeError(error) },
+        "connectors"
+      );
       return false;
     }
   }
@@ -191,7 +248,7 @@ function createConnectorManager({
     try {
       write();
     } catch (error) {
-      logger.warn("connector receipt update failed", { error: error.message }, "connectors");
+      logger.warn("connector receipt update failed", { ...describeError(error) }, "connectors");
     }
   }
 
@@ -202,31 +259,6 @@ function createConnectorManager({
     }
   });
 
-  // Expired actions leave memory (and their payloads with them) on the next
-  // call, and their receipts say so rather than a later "app_quit".
-  function expireStale() {
-    for (const actionId of pendingActions.sweepExpired()) {
-      record(() =>
-        actionLog.update(actionId, { state: "expired", errorCode: "expired" }, "pending")
-      );
-    }
-  }
-
-  // A lookup that throws counts as no connection, so the connector's
-  // exception text never reaches the renderer.
-  async function readBinding(connector) {
-    try {
-      return await connector.getBinding();
-    } catch (error) {
-      logger.warn(
-        "connector binding lookup failed",
-        { connectorId: connector.id, error: error.message },
-        "connectors"
-      );
-      return null;
-    }
-  }
-
   function resolveAction(connectorId, action, kind) {
     const connector = byId.get(connectorId);
     if (!connector) return { error: "unknown_connector" };
@@ -234,25 +266,189 @@ function createConnectorManager({
     return { connector };
   }
 
+  // Cards the renderer never answered are expired here too, so their payload
+  // (message text) doesn't linger and Recent never shows them as waiting.
+  // Their receipts say so rather than a later "app_quit".
+  function sweepExpired() {
+    for (const actionId of pendingActions.sweepExpired()) {
+      record(() =>
+        actionLog.update(actionId, { state: "expired", errorCode: "expired" }, "pending")
+      );
+    }
+  }
+
+  async function statusOf(connector) {
+    try {
+      return { id: connector.id, ...normalizeStatus(await connector.getStatus()) };
+    } catch (error) {
+      logger.warn(
+        "connector status failed",
+        { connectorId: connector.id, ...describeError(error) },
+        "connectors"
+      );
+      return { id: connector.id, ...normalizeStatus(null) };
+    }
+  }
+
+  async function currentBinding(connector) {
+    try {
+      return normalizeBinding(await connector.getBinding());
+    } catch (error) {
+      logger.warn(
+        "connector binding failed",
+        { connectorId: connector.id, ...describeError(error) },
+        "connectors"
+      );
+      return null;
+    }
+  }
+
   async function status() {
-    return Promise.all(
-      [...byId.values()].map(async (connector) => {
-        try {
-          return { id: connector.id, ...(await connector.getStatus()) };
-        } catch (error) {
-          logger.warn(
-            "connector status failed",
-            { connectorId: connector.id, error: error.message },
-            "connectors"
-          );
-          return { id: connector.id, connected: false, accountLabel: null };
+    sweepExpired();
+    return Promise.all([...byId.values()].map(statusOf));
+  }
+
+  // The sign-in in flight per account and connector. A new Connect replaces
+  // it: a user who closed the browser tab would otherwise wait out the flow.
+  const connecting = new Map();
+  let statusSequence = 0;
+
+  async function notifyStatusChanged() {
+    const sequence = ++statusSequence;
+    try {
+      const statuses = await status();
+      // A later change is already being announced; this snapshot is older.
+      if (sequence === statusSequence) onStatusChanged(statuses);
+    } catch (error) {
+      logger.warn("connector status broadcast failed", describeError(error), "connectors");
+    }
+  }
+
+  async function revokeQuietly(connector, credential) {
+    try {
+      await withinDeadline(connector.revoke(credential), REVOKE_TIMEOUT_MS);
+    } catch (error) {
+      logger.warn(
+        "connector revoke failed",
+        { connectorId: connector.id, ...describeError(error) },
+        "connectors"
+      );
+    }
+  }
+
+  async function connect(connectorId, policyState) {
+    const accountId = getAccountId();
+    const refusal = actionRefusal(policyState, accountId);
+    if (refusal) return { status: "unavailable", reason: refusal };
+    const connector = byId.get(connectorId);
+    if (!connector?.authorize || !credentials) {
+      return { status: "unavailable", reason: "unknown_connector" };
+    }
+    const flowKey = `${accountId}:${connectorId}`;
+    connecting.get(flowKey)?.abort();
+    const controller = new AbortController();
+    connecting.set(flowKey, controller);
+    // The OAuth round trip can take minutes. What it returns belongs to the
+    // account and slot generation that started it, or to no one.
+    const startGeneration = credentials.generation(accountId, connectorId);
+    try {
+      let credential;
+      try {
+        credential = await connector.authorize({ signal: controller.signal });
+      } catch (error) {
+        // Replaced by a newer Connect before the provider answered: nothing
+        // was issued, so nothing is saved or revoked.
+        if (controller.signal.aborted) return { status: "failed", errorCode: "oauth_cancelled" };
+        const summary = describeError(error);
+        logger.warn("connector connect failed", { connectorId, ...summary }, "connectors");
+        return {
+          status: "failed",
+          errorCode: CONNECT_ERROR_CODES.has(summary.errorCode)
+            ? summary.errorCode
+            : "connect_failed",
+        };
+      }
+      // Replaced after the provider answered: the newer attempt is the one
+      // the user wants, and nobody will use this login.
+      if (controller.signal.aborted) {
+        await revokeQuietly(connector, credential);
+        return { status: "failed", errorCode: "oauth_cancelled" };
+      }
+      try {
+        if (getAccountId() !== accountId) {
+          throw Object.assign(new Error("account changed"), { code: "connection_changed" });
         }
-      })
-    );
+        // A new login: approvals prepared under the old one must not send.
+        credentials.replace(accountId, connectorId, credential, startGeneration);
+      } catch (error) {
+        // Nobody will use this login, so it is revoked rather than left live.
+        await revokeQuietly(connector, credential);
+        if (error.code === "connection_changed" || error.code === "signed_out") {
+          return { status: "failed", errorCode: "connection_changed" };
+        }
+        // A real write failure (disk, permission, encryption), not a race.
+        logger.warn(
+          "connector login save failed",
+          { connectorId, ...describeError(error) },
+          "connectors"
+        );
+        return { status: "failed", errorCode: "credential_save_failed" };
+      }
+      invalidate(connectorId);
+      await notifyStatusChanged();
+      const current = await statusOf(connector);
+      return {
+        status: "connected",
+        accountLabel: current.accountLabel,
+        workspaceLabel: current.workspaceLabel,
+      };
+    } finally {
+      if (connecting.get(flowKey) === controller) connecting.delete(flowKey);
+    }
+  }
+
+  // Removing access is always allowed: no policy or plan check.
+  async function disconnect(connectorId) {
+    const connector = byId.get(connectorId);
+    if (!connector?.revoke || !credentials) {
+      return { status: "unavailable", reason: "unknown_connector" };
+    }
+    const accountId = getAccountId();
+    if (!accountId) return { status: "unavailable", reason: "signed_out" };
+    const entry = credentials.read(accountId, connectorId);
+    if (entry) {
+      await revokeQuietly(connector, entry.credential);
+      try {
+        credentials.clear(accountId, connectorId, entry.generation);
+      } catch (error) {
+        if (error.code === "connection_changed" || error.code === "signed_out") {
+          // A reconnect landed while revoking: that newer login stays.
+          return { status: "failed", errorCode: "connection_changed" };
+        }
+        // A real write failure (disk, permission): the revoke above already
+        // happened, so the login is dead even though the local slot wasn't
+        // cleared. Never claim "disconnected" for a slot that's still there.
+        logger.warn(
+          "connector login clear failed",
+          { connectorId, ...describeError(error) },
+          "connectors"
+        );
+        return { status: "failed", errorCode: "disconnect_failed" };
+      }
+    }
+    invalidate(connectorId);
+    await notifyStatusChanged();
+    return { status: "disconnected" };
+  }
+
+  async function disconnectAll() {
+    for (const connector of byId.values()) {
+      if (connector.revoke) await disconnect(connector.id);
+    }
   }
 
   async function prepare(connectorId, action, args, { policyState, accountId }) {
-    expireStale();
+    sweepExpired();
     const refusal = policyRefusal(policyState);
     if (refusal) return { status: "unavailable", reason: refusal };
     const resolved = resolveAction(connectorId, action, "approval");
@@ -260,20 +456,21 @@ function createConnectorManager({
     if (!accountId) return RECEIPT_UNAVAILABLE_PREPARE_RESULT;
     const { connector } = resolved;
 
-    const binding = await readBinding(connector);
+    const binding = await currentBinding(connector);
     if (!binding) return { status: "unavailable", reason: "not_connected" };
 
     let prepared;
     try {
-      prepared = normalizePrepareResult(await connector.prepare(action, args || {}));
+      prepared = normalizePrepareResult(await connector.prepare(action, args || {}, { binding }));
     } catch (error) {
       logger.warn(
         "connector prepare threw",
-        { connectorId, action, error: error.message },
+        { connectorId, action, ...describeError(error) },
         "connectors"
       );
       return { ...INVALID_PREPARE_RESULT, errorCode: "prepare_failed" };
     }
+    if (prepared.errorCode === "reconnect_needed") void notifyStatusChanged();
     if (prepared.status !== "ready") return prepared;
 
     const actionId = pendingActions.create({
@@ -311,7 +508,7 @@ function createConnectorManager({
   }
 
   async function commit(actionId, edits, { policyState, accountId }) {
-    expireStale();
+    sweepExpired();
     const entry = pendingActions.get(actionId);
     if (!entry) return { state: "not_sent", reason: "not_found" };
     // A second click while the first is sending must neither send nor
@@ -319,12 +516,17 @@ function createConnectorManager({
     if (entry.state !== "pending") return { state: "not_sent", reason: "not_pending" };
 
     const refusal = policyRefusal(policyState);
+    // A policy lookup that timed out or went offline says nothing about this
+    // action: leave it pending so the user can press Send again.
+    if (refusal === "policy_unavailable") {
+      return { state: "not_sent", reason: refusal, retryable: true };
+    }
     if (refusal) return withdrawPending(actionId, refusal);
     // Another account (or none) must not send what this one prepared.
     if (entry.accountId !== accountId) return withdrawPending(actionId, "account_changed");
 
     const connector = byId.get(entry.connectorId);
-    const begun = pendingActions.beginCommit(actionId, await readBinding(connector));
+    const begun = pendingActions.beginCommit(actionId, await currentBinding(connector));
     if (!begun.ok) {
       if (begun.reason === "expired" || begun.reason === "connection_changed") {
         const state = begun.reason === "expired" ? "expired" : "cancelled";
@@ -352,16 +554,19 @@ function createConnectorManager({
     let result;
     try {
       result = normalizeCommitResult(
-        await connector.commit(entry.action, entry.payload, sanitizeEdits(edits))
+        await connector.commit(entry.action, entry.payload, sanitizeEdits(edits), {
+          binding: entry.binding,
+        })
       );
     } catch (error) {
       logger.warn(
         "connector commit threw",
-        { connectorId: entry.connectorId, action: entry.action, error: error.message },
+        { connectorId: entry.connectorId, action: entry.action, ...describeError(error) },
         "connectors"
       );
       result = { state: "unknown" };
     }
+    if (result.errorCode === "reconnect_needed") void notifyStatusChanged();
 
     pendingActions.finish(actionId);
     record(() =>
@@ -373,14 +578,19 @@ function createConnectorManager({
     );
     logger.info(
       "connector action finished",
-      { connectorId: entry.connectorId, action: entry.action, state: result.state },
+      {
+        connectorId: entry.connectorId,
+        action: entry.action,
+        state: result.state,
+        errorCode: result.errorCode || null,
+      },
       "connectors"
     );
     return result;
   }
 
   function cancel(actionId, reason) {
-    expireStale();
+    sweepExpired();
     const safeReason = CANCEL_REASONS.has(reason) ? reason : "cancelled_by_user";
     const cancelled = pendingActions.cancel(actionId);
     if (cancelled) {
@@ -420,7 +630,7 @@ function createConnectorManager({
     } catch (error) {
       logger.warn(
         "connector direct action threw",
-        { connectorId, action, error: error.message },
+        { connectorId, action, ...describeError(error) },
         "connectors"
       );
       result = uncertainDirectResult("direct_failed");
@@ -448,12 +658,26 @@ function createConnectorManager({
   // Receipts name the people a user wrote to: only the account that took the
   // action sees them.
   function recentActions(connectorId, limit, accountId) {
-    expireStale();
+    sweepExpired();
+    if (!accountId) return [];
     const safeLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 10;
     return actionLog.listRecent(connectorId, safeLimit, accountId);
   }
 
-  return { status, prepare, commit, cancel, runDirect, invalidate, recentActions };
+  return {
+    status,
+    prepare,
+    commit,
+    cancel,
+    runDirect,
+    invalidate,
+    recentActions,
+    sweepExpired,
+    connect,
+    disconnect,
+    disconnectAll,
+    notifyStatusChanged,
+  };
 }
 
 module.exports = { createConnectorManager };

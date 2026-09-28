@@ -3,11 +3,13 @@ const crypto = require("crypto");
 const PENDING_TTL_MS = 10 * 60 * 1000;
 
 // A pending action may only be sent under the connection it was prepared on:
-// a reconnect (generation bump) or another account must not inherit it.
+// another OpenWhispr account, another provider login, or a reconnect
+// (generation bump) must not inherit it.
 function bindingsMatch(a, b) {
   return Boolean(
     a &&
     b &&
+    (a.ownerAccountId ?? null) === (b.ownerAccountId ?? null) &&
     a.accountId === b.accountId &&
     (a.workspaceId ?? null) === (b.workspaceId ?? null) &&
     a.generation === b.generation
@@ -89,7 +91,9 @@ function createPendingActions({
     return removed;
   }
 
-  // Committing actions are left alone: their real outcome is still coming.
+  // Pending actions whose card outlived the TTL without the renderer ever
+  // answering (window closed, renderer crashed). Committing ones are never
+  // touched: their real outcome must still be recorded.
   function sweepExpired() {
     const expired = [];
     for (const [actionId, entry] of actions) {

@@ -4,7 +4,7 @@ function createActionLog(databaseManager) {
     update: (id, patch, fromState) =>
       databaseManager.updateConnectorActionState(id, patch, fromState ?? null),
     listRecent: (connector, limit, accountId) =>
-      databaseManager.listRecentConnectorActions(connector, limit, accountId),
+      databaseManager.listRecentConnectorActions(connector, limit, accountId ?? null),
     reconcileInterrupted: () => databaseManager.reconcileInterruptedConnectorActions(),
   };
 }

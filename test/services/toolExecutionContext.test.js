@@ -26,6 +26,7 @@ test("toAISDKFormat gives each call its own tool-call id and the shared scope", 
   const controller = new AbortController();
   const onApprovalRequested = () => {};
   const tools = registry.toAISDKFormat((toolCallId) => ({
+    messageId: "m1",
     toolCallId,
     signal: controller.signal,
     onApprovalRequested,
@@ -81,8 +82,8 @@ test("a tool execution scope shares one signal and aborts it once", async () => 
       holds.push(options);
     },
   });
-  const first = scope.createContext("call-a");
-  const second = scope.createContext("call-b");
+  const first = scope.createContext({ messageId: "m1", toolCallId: "call-a" });
+  const second = scope.createContext({ messageId: "m1", toolCallId: "call-b" });
 
   assert.equal(first.toolCallId, "call-a");
   assert.equal(first.signal, second.signal);
@@ -108,7 +109,7 @@ test("a scope's notices do nothing once its turn has ended", async () => {
       notices += 1;
     },
   });
-  const context = scope.createContext("call-d");
+  const context = scope.createContext({ messageId: "m1", toolCallId: "call-d" });
 
   // A slow tool result arriving after Esc must not reopen a dismissed panel.
   scope.abort();
@@ -121,15 +122,20 @@ test("a scope's notices do nothing once its turn has ended", async () => {
 test("turn slots are shared by a scope's calls and start over with each turn", async () => {
   const { createToolExecutionScope } = await loadScope();
   const scope = createToolExecutionScope();
-  const first = scope.createContext("call-e");
-  const second = scope.createContext("call-f");
+  const first = scope.createContext({ messageId: "m1", toolCallId: "call-e" });
+  const second = scope.createContext({ messageId: "m1", toolCallId: "call-f" });
 
   assert.equal(first.claimTurnSlot("draft", 2), true);
   assert.equal(second.claimTurnSlot("draft", 2), true);
   assert.equal(first.claimTurnSlot("draft", 2), false);
   // Keys count separately.
   assert.equal(second.claimTurnSlot("clipboard", 1), true);
-  assert.equal(createToolExecutionScope().createContext("call-g").claimTurnSlot("draft", 2), true);
+  assert.equal(
+    createToolExecutionScope()
+      .createContext({ messageId: "m1", toolCallId: "call-g" })
+      .claimTurnSlot("draft", 2),
+    true
+  );
 });
 
 test("executeTool settles an aborted call at once and never runs one after the abort", async () => {
@@ -146,14 +152,21 @@ test("executeTool settles an aborted call at once and never runs one after the a
   };
   const scope = createToolExecutionScope();
 
-  const pending = executeTool(hanging, {}, scope.createContext("call-h"));
+  const pending = executeTool(
+    hanging,
+    {},
+    scope.createContext({ messageId: "m1", toolCallId: "call-h" })
+  );
   scope.abort();
   assert.deepEqual(await pending, { success: false, data: null, displayText: "" });
-  assert.deepEqual(await executeTool(hanging, {}, scope.createContext("call-i")), {
-    success: false,
-    data: null,
-    displayText: "",
-  });
+  assert.deepEqual(
+    await executeTool(hanging, {}, scope.createContext({ messageId: "m1", toolCallId: "call-i" })),
+    {
+      success: false,
+      data: null,
+      displayText: "",
+    }
+  );
   assert.equal(runs, 1);
   // The late rejection is swallowed rather than surfacing as unhandled.
   await new Promise((resolve) => setTimeout(resolve, 80));
@@ -162,7 +175,10 @@ test("executeTool settles an aborted call at once and never runs one after the a
 test("executeTool passes results and errors through while the turn is live", async () => {
   const { executeTool } = await loadRegistry();
   const { createToolExecutionScope } = await loadScope();
-  const context = createToolExecutionScope().createContext("call-j");
+  const context = createToolExecutionScope().createContext({
+    messageId: "m1",
+    toolCallId: "call-j",
+  });
   assert.deepEqual(await executeTool(recordingTool([]), { a: 1 }, context), {
     success: true,
     data: { ok: true },
@@ -215,7 +231,9 @@ test("an aborted AI SDK turn ends even when a tool never settles", async () => {
   const result = streamText({
     model,
     messages: [{ role: "user", content: "hi" }],
-    tools: registry.toAISDKFormat(scope.createContext),
+    tools: registry.toAISDKFormat((toolCallId, signal) =>
+      scope.createContext({ messageId: "m1", toolCallId, signal })
+    ),
     stopWhen: stepCountIs(5),
     abortSignal: streamAbort.signal,
   });
@@ -239,7 +257,10 @@ test("an aborted AI SDK turn ends even when a tool never settles", async () => {
 
 test("a scope without handlers ignores approval and delivery notices", async () => {
   const { createToolExecutionScope } = await loadScope();
-  const context = createToolExecutionScope().createContext("call-c");
+  const context = createToolExecutionScope().createContext({
+    messageId: "m1",
+    toolCallId: "call-c",
+  });
   assert.doesNotThrow(() => context.onApprovalRequested());
   assert.doesNotThrow(() => context.onHoldDelivery());
 });
@@ -281,4 +302,48 @@ test("the cloud tool loop passes each call's id to executeToolCall", async (t) =
   }
 
   assert.deepEqual(received, [{ name: "record_context", toolCallId: "call-9" }]);
+});
+
+test("toAISDKFormat hands the SDK's own abort signal to the context factory", async () => {
+  const { ToolRegistry } = await loadRegistry();
+  const seen = [];
+  const registry = new ToolRegistry();
+  registry.register(recordingTool(seen));
+  const factoryCalls = [];
+  const tools = registry.toAISDKFormat((toolCallId, abortSignal) => {
+    factoryCalls.push({ toolCallId, abortSignal });
+    return {
+      messageId: "m1",
+      toolCallId,
+      signal: abortSignal ?? new AbortController().signal,
+      onApprovalRequested() {},
+      onHoldDelivery() {},
+    };
+  });
+  const sdk = new AbortController();
+
+  await tools.record_context.execute(
+    {},
+    { toolCallId: "call-1", messages: [], abortSignal: sdk.signal }
+  );
+
+  assert.equal(factoryCalls[0].toolCallId, "call-1");
+  assert.equal(factoryCalls[0].abortSignal, sdk.signal);
+});
+
+test("a context signal aborts when either its turn or its own SDK call aborts", async () => {
+  const { createToolExecutionScope } = await loadScope();
+  const scope = createToolExecutionScope();
+  const sdk = new AbortController();
+  const linked = scope.createContext({ messageId: "m1", toolCallId: "call-a", signal: sdk.signal });
+  const plain = scope.createContext({ messageId: "m1", toolCallId: "call-b" });
+
+  assert.equal(linked.messageId, "m1");
+  assert.equal(linked.signal.aborted, false);
+  sdk.abort();
+  assert.equal(linked.signal.aborted, true);
+  assert.equal(plain.signal.aborted, false, "one call's SDK abort leaves the other calls alone");
+
+  scope.abort();
+  assert.equal(plain.signal.aborted, true);
 });

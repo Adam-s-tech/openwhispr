@@ -519,13 +519,19 @@ class DatabaseManager {
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
+      this.db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_connector_actions_connector ON connector_actions(connector, created_at)"
+      );
+      // Destination labels name channels and people in someone's workspace,
+      // so a receipt belongs to the OpenWhispr account that made it. Tables
+      // created before the column existed gain it here.
       try {
         this.db.exec("ALTER TABLE connector_actions ADD COLUMN account_id TEXT");
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
       this.db.exec(
-        "CREATE INDEX IF NOT EXISTS idx_connector_actions_connector ON connector_actions(connector, created_at)"
+        "CREATE INDEX IF NOT EXISTS idx_connector_actions_account ON connector_actions(account_id, connector, created_at)"
       );
       try {
         this.db.exec("ALTER TABLE agent_conversations ADD COLUMN cloud_id TEXT");
@@ -4805,7 +4811,7 @@ class DatabaseManager {
   // sign-in or account switch.
   insertConnectorAction({
     id,
-    accountId,
+    accountId = null,
     connector,
     action,
     kind,
@@ -4856,7 +4862,7 @@ class DatabaseManager {
 
   // Receipts name the people a user wrote to, so only the account that took
   // the action sees them.
-  listRecentConnectorActions(connector, limit, accountId) {
+  listRecentConnectorActions(connector, limit = 10, accountId = null) {
     if (!this.db) throw new Error("Database not initialized");
     if (!accountId) return [];
     return this.db

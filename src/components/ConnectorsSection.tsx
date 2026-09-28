@@ -1,36 +1,29 @@
-import { useEffect, useState, useSyncExternalStore, type ReactElement } from "react";
+import { useSyncExternalStore, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Mail } from "./icons";
 import { Button } from "./ui/button";
-import { SectionLabel, SettingsPanel, SettingsPanelRow } from "./ui/SettingsSection";
+import { SettingsPanel, SettingsPanelRow } from "./ui/SettingsSection";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { RecentActions } from "./connectors/RecentActions";
+import { SlackConnectorRow } from "./connectors/SlackConnectorRow";
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePolicyStore } from "../stores/policyStore";
 import { isConnectorsAllowed, isConnectorsBlockedByOrg } from "../stores/policyRules";
 import { getUsageState, subscribeUsage } from "../lib/usageStore";
 import { readIsSubscribed, subscribeIsSubscribed } from "../lib/subscriptionFlag";
-import type { ConnectorActionRecord } from "../types/connectors";
 import { hasConnectorPlan } from "../utils/connectorEligibility";
-import { normalizeDbDate } from "../utils/dateFormatting";
 import {
   EMAIL_DRAFT_TARGET_SETTINGS,
   resolveEmailDraftTarget,
   type EmailDraftTargetSetting,
 } from "../utils/emailDraftTarget";
 
-function formatWhen(createdAt: string, locale: string): string {
-  const date = normalizeDbDate(createdAt);
-  return Number.isNaN(date.getTime())
-    ? createdAt
-    : date.toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
-}
-
 interface ConnectorsSectionProps {
   onUpgrade: () => void;
 }
 
 export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactElement {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const blockedByOrg = usePolicyStore(isConnectorsBlockedByOrg);
   // False while the policy loads, after a failed fetch, or when the org requires
   // a newer app: chat has no connector tools then, so the card mustn't offer them.
@@ -45,35 +38,6 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
   const isSubscribedFlag = useSyncExternalStore(subscribeIsSubscribed, readIsSubscribed);
   const isPaid = isSignedIn && hasConnectorPlan(usage, isSubscribedFlag);
   const showActions = isPaid && connectorsAllowed;
-  const [recent, setRecent] = useState<ConnectorActionRecord[]>([]);
-  const [accountScopeChanges, setAccountScopeChanges] = useState(0);
-
-  // Main lists the receipts of its active account scope, which settles after
-  // the renderer's own sign-in state; refetch once it has moved.
-  useEffect(
-    () =>
-      window.electronAPI?.onActiveAccountScopeChanged?.(() =>
-        setAccountScopeChanges((count) => count + 1)
-      ),
-    []
-  );
-
-  useEffect(() => {
-    setRecent([]);
-    if (!showActions) return undefined;
-    let active = true;
-    void window.electronAPI
-      ?.connectorRecentActions?.("email", 10)
-      .then((rows) => {
-        if (active) setRecent(rows ?? []);
-      })
-      .catch(() => {
-        if (active) setRecent([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [showActions, accountScopeChanges]);
 
   const automaticTarget = resolveEmailDraftTarget({
     emailDraftTarget: "auto",
@@ -133,33 +97,9 @@ export function ConnectorsSection({ onUpgrade }: ConnectorsSectionProps): ReactE
           )}
         </div>
 
-        {showActions && recent.length > 0 && (
-          <div className="mt-3">
-            <SectionLabel>{t("connectors.recent.title")}</SectionLabel>
-            <ul className="space-y-1">
-              {recent.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
-                >
-                  <span className="truncate" dir="auto">
-                    {row.destinationLabel
-                      ? t(`connectors.recent.actions.${row.connector}_${row.action}`, {
-                          destination: row.destinationLabel,
-                        })
-                      : // A run interrupted by a quit never learned its destination.
-                        t(`connectors.recent.unlabeledActions.${row.connector}_${row.action}`)}
-                  </span>
-                  <span className="shrink-0">
-                    {formatWhen(row.createdAt, i18n.language)} ·{" "}
-                    {t(`connectors.recent.states.${row.state}`)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {showActions && <RecentActions connectorId="email" />}
       </SettingsPanelRow>
+      <SlackConnectorRow isPaid={isPaid} blockedByOrg={blockedByOrg} onUpgrade={onUpgrade} />
     </SettingsPanel>
   );
 }

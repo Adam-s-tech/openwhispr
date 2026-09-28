@@ -3734,6 +3734,7 @@
       "search_notesName": "Buscar notas",
       "email_draftName": "Borrador de correo",
       "find_contactName": "Buscar contacto",
+      "slack_send_messageName": "Mensaje de Slack",
       "get_noteName": "Obtener nota",
       "create_noteName": "Crear nota",
       "update_noteName": "Actualizar nota",
@@ -3748,6 +3749,7 @@
       "search_notesStatus": "Buscando notas...",
       "email_draftStatus": "Abriendo un borrador de correo...",
       "find_contactStatus": "Buscando contactos...",
+      "slack_send_messageStatus": "Preparando un mensaje de Slack...",
       "web_searchStatus": "Buscando en la web...",
       "copy_to_clipboardStatus": "Copiando al portapapeles...",
       "get_calendar_eventsStatus": "Consultando calendario...",
@@ -3903,7 +3905,8 @@
   "connectors": {
     "approval": {
       "headers": {
-        "default": "Enviar a {{destination}}"
+        "default": "Enviar a {{destination}}",
+        "slackPost": "Publicar en {{destination}}"
       },
       "identity": "Como {{account}}",
       "identityWithWorkspace": "Como {{account}} en {{workspace}}",
@@ -3919,7 +3922,24 @@
       "failed": "No se pudo enviar: {{message}}",
       "unknown": "No se pudo confirmar el envío. Verifica {{destination}}.",
       "cancelled": "Cancelado. No se envió nada.",
-      "notSent": "No enviado."
+      "notSent": "No enviado.",
+      "policyRetry": "No se pudieron comprobar los ajustes de tu organización, así que no se envió nada. Pulsa Enviar para intentarlo de nuevo.",
+      "errors": {
+        "not_in_channel": "No eres miembro de {{destination}}.",
+        "channel_not_found": "{{destination}} ya no se pudo encontrar en Slack.",
+        "is_archived": "{{destination}} está archivado.",
+        "reconnect_needed": "Slack debe reconectarse en Configuración.",
+        "connection_changed": "La conexión de Slack cambió antes de enviar, así que no se envió nada.",
+        "rate_limited": "Slack está ocupado. Vuelve a intentarlo en breve.",
+        "missing_scope": "OpenWhispr no tiene permiso para publicar ahí. Reconecta Slack en Configuración.",
+        "msg_too_long": "El mensaje es demasiado largo para Slack (12.000 caracteres como máximo, una vez formateado).",
+        "no_text": "El mensaje está vacío.",
+        "network": "No se pudo conectar con Slack. No se envió nada.",
+        "credential_save_failed": "No se pudo guardar el inicio de sesión de Slack en este equipo. No se envió nada. Inténtalo de nuevo.",
+        "dm_failed": "No se pudo abrir el mensaje directo a {{destination}}. No se envió nada.",
+        "restricted": "{{destination}} es de solo lectura o está restringido para ti.",
+        "generic": "Algo salió mal. No se envió nada."
+      }
     },
     "policyOff": "Tu organización ha desactivado los conectores.",
     "email": {
@@ -3936,13 +3956,46 @@
         "mailto": "Aplicación de correo predeterminada"
       }
     },
+    "slack": {
+      "title": "Slack",
+      "description": "El asistente puede publicar mensajes en canales y a personas en tu nombre. Apruebas cada mensaje antes de que se envíe.",
+      "connect": "Conectar",
+      "reconnect": "Reconectar",
+      "disconnect": "Desconectar",
+      "connecting": "Termina de conectar en tu navegador…",
+      "connectedAs": "Conectado como {{account}} en {{workspace}}",
+      "needsReconnect": "Slack debe reconectarse.",
+      "proRequired": "Actualiza a un plan de pago para que el asistente envíe mensajes de Slack por ti.",
+      "errors": {
+        "connect_failed": "No se pudo conectar Slack. Inténtalo de nuevo.",
+        "disconnect_failed": "No se pudo desconectar Slack. Inténtalo de nuevo.",
+        "oauth_denied": "Slack no se conectó porque no se concedió el acceso.",
+        "oauth_timeout": "La conexión tardó demasiado. Inténtalo de nuevo.",
+        "oauth_state_mismatch": "Ese enlace de inicio de sesión estaba caducado. Inténtalo de nuevo.",
+        "ports_busy": "Otra aplicación está usando los puertos que OpenWhispr necesita para conectarse. Ciérrala e inténtalo de nuevo.",
+        "token_exchange_failed": "Slack no terminó de conectarse. Inténtalo de nuevo.",
+        "not_configured": "Slack no está disponible en esta versión.",
+        "connection_changed": "Tu cuenta o la conexión de Slack cambiaron durante la conexión. Inténtalo de nuevo.",
+        "signed_out": "Inicia sesión en OpenWhispr para conectar Slack.",
+        "policy_blocked": "Tu organización ha desactivado los conectores.",
+        "policy_unavailable": "No se pudieron comprobar los ajustes de tu organización. Inténtalo de nuevo."
+      },
+      "browser": {
+        "connectedTitle": "Slack está conectado",
+        "connectedBody": "Puedes cerrar esta pestaña y volver a OpenWhispr.",
+        "failedTitle": "Slack no se conectó",
+        "failedBody": "Vuelve a OpenWhispr para intentarlo de nuevo."
+      }
+    },
     "recent": {
       "title": "Acciones recientes",
       "actions": {
-        "email_draft": "Borrador a {{destination}}"
+        "email_draft": "Borrador a {{destination}}",
+        "slack_send_message": "Mensaje a {{destination}}"
       },
       "unlabeledActions": {
-        "email_draft": "Borrador de correo"
+        "email_draft": "Borrador de correo",
+        "slack_send_message": "Mensaje de Slack"
       },
       "states": {
         "pending": "Esperando",
@@ -3961,7 +4014,6 @@
       "draftOpenedOnlySubjectCopied": "Se abrió un borrador para {{destination}}. El asunto está en tu portapapeles.",
       "needsDetails": "Faltan detalles.",
       "unavailable": "Los conectores no están disponibles en este momento.",
-      "failed": "No funcionó.",
       "unknown": "Sin confirmar. Comprueba si se completó antes de volver a intentarlo.",
       "draftUnknown": "Sin confirmar: puede que el borrador para {{destination}} no se haya abierto. Compruébalo antes de volver a intentarlo.",
       "contactsFound": "Contactos encontrados: {{total}}",
@@ -3970,7 +4022,21 @@
       "errors": {
         "open_failed": "No se pudo abrir tu aplicación de correo.",
         "draft_too_long": "Demasiados destinatarios para un enlace de borrador.",
-        "invalid_address": "Se necesitan direcciones de correo completas."
+        "invalid_address": "Se necesitan direcciones de correo completas.",
+        "not_in_channel": "No eres miembro de ese canal.",
+        "channel_not_found": "No se pudo encontrar esa conversación.",
+        "is_archived": "Ese canal está archivado.",
+        "reconnect_needed": "Slack debe reconectarse.",
+        "connection_changed": "La conexión de Slack cambió. No se envió nada.",
+        "rate_limited": "Slack está ocupado.",
+        "missing_scope": "Falta el permiso de Slack.",
+        "msg_too_long": "Mensaje demasiado largo para Slack.",
+        "no_text": "El mensaje está vacío.",
+        "network": "No se pudo conectar con Slack. No se envió nada.",
+        "credential_save_failed": "No se pudo guardar el inicio de sesión de Slack en este equipo. No se envió nada.",
+        "dm_failed": "No se pudo abrir el mensaje directo. No se envió nada.",
+        "restricted": "Ese canal es de solo lectura o está restringido.",
+        "generic": "No funcionó."
       }
     }
   },

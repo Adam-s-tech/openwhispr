@@ -79,7 +79,9 @@ async function mountApprovalTurn(t) {
   store.useConnectorApprovalStore.setState({ entries: {} });
 
   function Harness() {
-    const entry = store.useConnectorApprovalStore((state) => state.entries["call-1"]);
+    const entry = store.useConnectorApprovalStore(
+      (state) => state.entries[store.approvalKey("m1", "call-1")]
+    );
     return entry ? React.createElement(ApprovalCard, { entry }) : null;
   }
   const { createRoot } = require("react-dom/client");
@@ -91,6 +93,7 @@ async function mountApprovalTurn(t) {
   await React.act(async () => {
     toolResult = runApprovalAction(
       {
+        messageId: "m1",
         toolCallId: "call-1",
         signal: controller.signal,
         onApprovalRequested() {},
@@ -115,7 +118,9 @@ test("Edit, change, Done editing, Send: the reviewed text is what gets sent", as
   assert.ok(bodyField, "the body textarea is rendered in edit mode");
   assert.equal(bodyField.getAttribute("dir"), "auto");
   // What the textarea's onChange calls with the typed value.
-  await React.act(async () => store.updateApprovalDraft("call-1", { body: "Edited text" }));
+  await React.act(async () =>
+    store.updateApprovalDraft(store.approvalKey("m1", "call-1"), { body: "Edited text" })
+  );
   await React.act(async () => click(button(container, "connectors.approval.doneEditing")));
   assert.match(container.textContent, /Edited text/);
   await React.act(async () => click(button(container, "connectors.approval.send")));
@@ -131,7 +136,9 @@ test("Send while editing commits the edit and leaves edit mode", async (t) => {
   const { container, store, commits, toolResult } = await mountApprovalTurn(t);
 
   await React.act(async () => click(button(container, "connectors.approval.edit")));
-  await React.act(async () => store.updateApprovalDraft("call-1", { body: "Edited text" }));
+  await React.act(async () =>
+    store.updateApprovalDraft(store.approvalKey("m1", "call-1"), { body: "Edited text" })
+  );
   await React.act(async () => click(button(container, "connectors.approval.send")));
   await toolResult;
 

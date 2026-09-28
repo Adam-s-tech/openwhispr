@@ -98,6 +98,9 @@ async function renderAssistantPanel(
         export function useConnectorApprovalStore(selector) {
           return selector({ entries: globalThis.__assistantPanelApprovals || {} });
         }
+        export function approvalKey(messageId, toolCallId) {
+          return messageId + "::" + toolCallId;
+        }
       `,
       "/chat/ApprovalCard": `
         import React from "react";
@@ -740,7 +743,9 @@ test("a pending approval shows in the panel and replaces the tool overlay", asyn
       agentState: "tool-executing",
       activeToolName: "slack_send_message",
       approvals: {
-        "call-1": {
+        "assistant-1::call-1": {
+          key: "assistant-1::call-1",
+          messageId: "assistant-1",
           toolCallId: "call-1",
           actionId: "a1",
           connectorId: "slack",

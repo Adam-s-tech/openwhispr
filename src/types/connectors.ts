@@ -1,4 +1,4 @@
-export type ConnectorPolicyState = "allowed" | "blocked" | "unavailable";
+export type ConnectorPolicyState = "allowed" | "blocked" | "unavailable" | "signed_out";
 
 export type ConnectorCancelReason = "cancelled_by_user" | "conversation_ended" | "expired";
 
@@ -32,8 +32,8 @@ export type ConnectorPrepareResult =
 export type ConnectorCommitResult =
   | { state: "sent"; url?: string }
   | { state: "failed"; errorCode: string; message: string }
-  | { state: "unknown"; checkUrl?: string }
-  | { state: "not_sent"; reason: string };
+  | { state: "unknown"; checkUrl?: string; errorCode?: string }
+  | { state: "not_sent"; reason: string; retryable?: boolean };
 
 export type ConnectorDirectResult =
   | {
@@ -59,7 +59,19 @@ export interface ConnectorStatus {
   id: string;
   connected: boolean;
   accountLabel: string | null;
+  workspaceLabel: string | null;
+  needsReconnect: boolean;
 }
+
+export type ConnectorConnectResult =
+  | { status: "connected"; accountLabel: string | null; workspaceLabel: string | null }
+  | { status: "failed"; errorCode: string }
+  | { status: "unavailable"; reason: string };
+
+export type ConnectorDisconnectResult =
+  | { status: "disconnected" }
+  | { status: "failed"; errorCode: string }
+  | { status: "unavailable"; reason: string };
 
 export type ConnectorActionState =
   "pending" | "committing" | "sent" | "failed" | "unknown" | "cancelled" | "expired";
