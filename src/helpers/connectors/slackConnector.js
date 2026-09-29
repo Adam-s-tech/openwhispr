@@ -186,7 +186,8 @@ function createSlackConnector({ api, auth, directory, credentials }) {
 
   return {
     id: "slack",
-    actions: { send_message: { kind: "approval" } },
+    // The card edits only the message text; the destination stays as prepared.
+    actions: { send_message: { kind: "approval", editable: { body: "text" } } },
 
     async getStatus() {
       const entry = credentials.read(credentials.activeAccountId(), "slack");
@@ -339,6 +340,8 @@ function createSlackConnector({ api, auth, directory, credentials }) {
 
     authorize: (options) => auth.authorize(options),
     revoke: (credential) => auth.revoke(credential),
+    // Which Slack user, in which workspace, a login belongs to.
+    loginKey: (credential) => `${credential?.teamId}:${credential?.userId}`,
   };
 }
 

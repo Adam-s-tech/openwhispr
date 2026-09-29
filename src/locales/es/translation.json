@@ -3747,7 +3747,7 @@
       "update_dictionaryName": "Actualizar diccionario",
       "update_snippetsName": "Actualizar snippets",
       "search_notesStatus": "Buscando notas...",
-      "email_draftStatus": "Abriendo un borrador de correo...",
+      "email_draftStatus": "Preparando un correo...",
       "find_contactStatus": "Buscando contactos...",
       "slack_send_messageStatus": "Preparando un mensaje de Slack...",
       "web_searchStatus": "Buscando en la web...",
@@ -3906,7 +3906,8 @@
     "approval": {
       "headers": {
         "default": "Enviar a {{destination}}",
-        "slackPost": "Publicar en {{destination}}"
+        "slackPost": "Publicar en {{destination}}",
+        "email": "Correo para {{destination}}"
       },
       "identity": "Como {{account}}",
       "identityWithWorkspace": "Como {{account}} en {{workspace}}",
@@ -3938,13 +3939,48 @@
         "credential_save_failed": "No se pudo guardar el inicio de sesión de Slack en este equipo. No se envió nada. Inténtalo de nuevo.",
         "dm_failed": "No se pudo abrir el mensaje directo a {{destination}}. No se envió nada.",
         "restricted": "{{destination}} es de solo lectura o está restringido para ti.",
-        "generic": "Algo salió mal. No se envió nada."
+        "generic": "Algo salió mal. No se envió nada.",
+        "gmail": {
+          "reconnect_needed": "Gmail debe reconectarse en Configuración.",
+          "network": "No se pudo conectar con Gmail. No se envió nada.",
+          "rate_limited": "Gmail está ocupado. Vuelve a intentarlo en breve.",
+          "daily_limit": "Se alcanzó el límite diario de envío de Gmail. No se envió nada.",
+          "domain_policy": "El administrador de Google de tu organización bloqueó esta app. No se envió nada.",
+          "invalid_recipients": "Una de las direcciones no es válida. No se envió nada.",
+          "too_many_recipients": "Demasiados destinatarios: {{max}} como máximo. No se envió nada.",
+          "too_long": "El asunto o el mensaje es demasiado largo para Gmail. No se envió nada.",
+          "invalid_message": "Gmail rechazó el correo por estar mal formado. No se envió nada.",
+          "gmail_unavailable": "El envío con Gmail no está disponible ahora. No se envió nada.",
+          "refused": "Gmail se negó a enviarlo. No se envió nada.",
+          "connection_changed": "La conexión de Gmail cambió antes de enviar, así que no se envió nada.",
+          "credential_save_failed": "No se pudo guardar el inicio de sesión de Gmail en este equipo. No se envió nada. Inténtalo de nuevo."
+        }
+      },
+      "email": {
+        "from": "De {{account}}",
+        "toLabel": "Para",
+        "ccLabel": "CC",
+        "subjectLabel": "Asunto",
+        "bodyLabel": "Mensaje",
+        "addressHint": "Separa las direcciones con comas.",
+        "invalidAddress": "{{address}} no es una dirección de correo completa como nombre@ejemplo.com.",
+        "invalidAddressAnnouncement": "Una de las direcciones no es una dirección de correo completa.",
+        "sendsTo": "Se envía a {{addresses}}",
+        "missingTo": "Agrega al menos una dirección en Para.",
+        "tooManyRecipients": "Un correo puede ir a {{max}} direcciones como máximo, entre Para y CC.",
+        "subjectTooLong": "El asunto debe tener {{max}} caracteres como máximo.",
+        "bodyTooLong": "El mensaje es demasiado largo para Gmail. Acórtalo para enviarlo.",
+        "unknown": "No se pudo confirmar el envío. Revisa tu carpeta de enviados."
+      },
+      "openIn": {
+        "gmail": "Abrir en Gmail"
       }
     },
     "policyOff": "Tu organización ha desactivado los conectores.",
     "email": {
       "title": "Borradores de correo",
       "description": "El asistente abre un borrador prellenado en tu aplicación de correo. Tú lo revisas y pulsas Enviar.",
+      "descriptionSend": "El asistente muestra una tarjeta de correo en el chat. Solo se envía desde tu Gmail cuando pulsas Enviar.",
       "proRequired": "Actualiza a un plan de pago para que el asistente redacte correos por ti.",
       "unavailable": "Los borradores de correo no están disponibles en este momento.",
       "targetLabel": "Redactar correos en",
@@ -3953,7 +3989,9 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook (trabajo o escuela)",
         "outlookPersonal": "Outlook.com",
-        "mailto": "Aplicación de correo predeterminada"
+        "mailto": "Aplicación de correo predeterminada",
+        "gmailSend": "Enviar desde el chat (Gmail)",
+        "gmailSendConnectFirst": "Enviar desde el chat (Gmail) · conecta Gmail abajo"
       }
     },
     "slack": {
@@ -3987,15 +4025,52 @@
         "failedBody": "Vuelve a OpenWhispr para intentarlo de nuevo."
       }
     },
+    "gmail": {
+      "title": "Gmail",
+      "description": "El asistente puede enviar correos desde tu cuenta de Gmail. No puede leer tu correo y tú pulsas Enviar en cada correo.",
+      "connect": "Conectar",
+      "reconnect": "Reconectar",
+      "disconnect": "Desconectar",
+      "connecting": "Termina de conectar en tu navegador… Si Google indica que el acceso está bloqueado, el administrador de Google de tu organización debe permitir OpenWhispr.",
+      "connectedAs": "Conectado como {{account}}",
+      "needsReconnect": "Gmail debe reconectarse.",
+      "grantKept": "Desconectado. Google Calendar usa el mismo permiso de Google, así que OpenWhispr seguirá apareciendo en tu cuenta de Google hasta que también desconectes Google Calendar.",
+      "proRequired": "Actualiza a un plan de pago para que el asistente envíe correos desde Gmail por ti.",
+      "errors": {
+        "connect_failed": "No se pudo conectar Gmail. Inténtalo de nuevo.",
+        "disconnect_failed": "No se pudo desconectar Gmail. Inténtalo de nuevo.",
+        "oauth_denied": "Gmail no se conectó porque no se concedió el acceso.",
+        "oauth_timeout": "La conexión tardó demasiado. Si Google indicó que el acceso está bloqueado, pide al administrador de Google de tu organización que permita OpenWhispr. Si no, inténtalo de nuevo.",
+        "oauth_state_mismatch": "Ese enlace de inicio de sesión estaba caducado. Inténtalo de nuevo.",
+        "ports_busy": "Otra aplicación está usando los puertos que OpenWhispr necesita para conectarse. Ciérrala e inténtalo de nuevo.",
+        "token_exchange_failed": "Google no terminó de conectarse. Inténtalo de nuevo.",
+        "not_configured": "Gmail no está disponible en esta versión.",
+        "connection_changed": "Tu cuenta o la conexión de Gmail cambiaron durante la conexión. Inténtalo de nuevo.",
+        "signed_out": "Inicia sesión en OpenWhispr para conectar Gmail.",
+        "policy_blocked": "Tu organización ha desactivado los conectores.",
+        "policy_unavailable": "No se pudieron comprobar los ajustes de tu organización. Inténtalo de nuevo.",
+        "permission_not_granted": "Gmail no se conectó porque no se concedió el permiso para enviar correos. Vuelve a conectar y deja ese permiso marcado.",
+        "email_not_verified": "Google no ha verificado la dirección de correo de esta cuenta, así que Gmail no se conectó.",
+        "domain_policy": "El administrador de Google de tu organización bloqueó esta app. Pídele que permita OpenWhispr."
+      },
+      "browser": {
+        "connectedTitle": "Gmail está conectado",
+        "connectedBody": "Puedes cerrar esta pestaña y volver a OpenWhispr.",
+        "failedTitle": "Gmail no se conectó",
+        "failedBody": "Vuelve a OpenWhispr para intentarlo de nuevo."
+      }
+    },
     "recent": {
       "title": "Acciones recientes",
       "actions": {
         "email_draft": "Borrador a {{destination}}",
-        "slack_send_message": "Mensaje a {{destination}}"
+        "slack_send_message": "Mensaje a {{destination}}",
+        "gmail_send": "Correo a {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Borrador de correo",
-        "slack_send_message": "Mensaje de Slack"
+        "slack_send_message": "Mensaje de Slack",
+        "gmail_send": "Correo de Gmail"
       },
       "states": {
         "pending": "Esperando",
@@ -4017,7 +4092,7 @@
       "unknown": "Sin confirmar. Comprueba si se completó antes de volver a intentarlo.",
       "draftUnknown": "Sin confirmar: puede que el borrador para {{destination}} no se haya abierto. Compruébalo antes de volver a intentarlo.",
       "contactsFound": "Contactos encontrados: {{total}}",
-      "draftLimit": "Solo se pueden abrir {{count}} borradores por solicitud.",
+      "draftLimit": "Solo se pueden abrir {{max}} borradores por solicitud.",
       "clipboardBusy": "No se abrió: el texto de otro borrador sigue en tu portapapeles.",
       "errors": {
         "open_failed": "No se pudo abrir tu aplicación de correo.",
@@ -4036,8 +4111,27 @@
         "credential_save_failed": "No se pudo guardar el inicio de sesión de Slack en este equipo. No se envió nada.",
         "dm_failed": "No se pudo abrir el mensaje directo. No se envió nada.",
         "restricted": "Ese canal es de solo lectura o está restringido.",
-        "generic": "No funcionó."
-      }
+        "generic": "No funcionó.",
+        "gmail": {
+          "reconnect_needed": "Gmail debe reconectarse.",
+          "network": "No se pudo conectar con Gmail. No se envió nada.",
+          "rate_limited": "Gmail está ocupado.",
+          "daily_limit": "Se alcanzó el límite diario de envío de Gmail.",
+          "domain_policy": "Bloqueado por el administrador de Google de tu organización.",
+          "invalid_recipients": "Una dirección no es válida. No se envió nada.",
+          "too_many_recipients": "Demasiados destinatarios. No se envió nada.",
+          "too_long": "Demasiado largo para Gmail. No se envió nada.",
+          "invalid_message": "Gmail rechazó el correo. No se envió nada.",
+          "gmail_unavailable": "El envío con Gmail no está disponible ahora.",
+          "refused": "Gmail se negó a enviarlo.",
+          "connection_changed": "La conexión de Gmail cambió. No se envió nada.",
+          "credential_save_failed": "No se pudo guardar el inicio de sesión de Gmail en este equipo. No se envió nada."
+        }
+      },
+      "unknownSent": {
+        "gmail": "No se pudo confirmar que el correo para {{destination}} se envió. Revisa la carpeta Enviados de Gmail."
+      },
+      "gmailDraftLimit": "Solo se pueden preparar {{max}} correos por solicitud."
     }
   },
   "calendar": {

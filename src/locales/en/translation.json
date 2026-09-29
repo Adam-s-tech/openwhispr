@@ -3863,7 +3863,7 @@
       "update_dictionaryName": "Update dictionary",
       "update_snippetsName": "Update snippets",
       "search_notesStatus": "Searching notes...",
-      "email_draftStatus": "Opening an email draft...",
+      "email_draftStatus": "Preparing an email...",
       "find_contactStatus": "Looking up contacts...",
       "slack_send_messageStatus": "Preparing a Slack message...",
       "web_searchStatus": "Searching the web...",
@@ -4022,7 +4022,8 @@
     "approval": {
       "headers": {
         "default": "Send to {{destination}}",
-        "slackPost": "Post to {{destination}}"
+        "slackPost": "Post to {{destination}}",
+        "email": "Email to {{destination}}"
       },
       "identity": "As {{account}}",
       "identityWithWorkspace": "As {{account}} in {{workspace}}",
@@ -4054,13 +4055,48 @@
         "credential_save_failed": "The Slack login couldn't be saved on this computer. Nothing was sent. Try again.",
         "dm_failed": "The direct message to {{destination}} couldn't be opened. Nothing was sent.",
         "restricted": "{{destination}} is read-only or restricted for you.",
-        "generic": "Something went wrong. Nothing was sent."
+        "generic": "Something went wrong. Nothing was sent.",
+        "gmail": {
+          "reconnect_needed": "Gmail needs to be reconnected in Settings.",
+          "network": "Gmail couldn't be reached. Nothing was sent.",
+          "rate_limited": "Gmail is busy. Try again shortly.",
+          "daily_limit": "Gmail's daily sending limit was reached. Nothing was sent.",
+          "domain_policy": "Your organization's Google admin blocked this app. Nothing was sent.",
+          "invalid_recipients": "One of the addresses isn't valid. Nothing was sent.",
+          "too_many_recipients": "Too many recipients: {{max}} at most. Nothing was sent.",
+          "too_long": "The subject or message is too long for Gmail. Nothing was sent.",
+          "invalid_message": "Gmail refused the email as malformed. Nothing was sent.",
+          "gmail_unavailable": "Sending with Gmail isn't available right now. Nothing was sent.",
+          "refused": "Gmail refused to send it. Nothing was sent.",
+          "connection_changed": "The Gmail connection changed before sending, so nothing was sent.",
+          "credential_save_failed": "The Gmail login couldn't be saved on this computer. Nothing was sent. Try again."
+        }
+      },
+      "email": {
+        "from": "From {{account}}",
+        "toLabel": "To",
+        "ccLabel": "Cc",
+        "subjectLabel": "Subject",
+        "bodyLabel": "Message",
+        "addressHint": "Separate addresses with commas.",
+        "invalidAddress": "{{address}} isn't a full email address like name@example.com.",
+        "invalidAddressAnnouncement": "One of the addresses isn't a full email address.",
+        "sendsTo": "Sends to {{addresses}}",
+        "missingTo": "Add at least one address to To.",
+        "tooManyRecipients": "An email can go to at most {{max}} addresses, To and Cc together.",
+        "subjectTooLong": "Keep the subject to {{max}} characters or fewer.",
+        "bodyTooLong": "The message is too long for Gmail. Shorten it to send.",
+        "unknown": "Couldn't confirm it was sent. Check your Sent folder."
+      },
+      "openIn": {
+        "gmail": "Open in Gmail"
       }
     },
     "policyOff": "Connectors are turned off by your organization.",
     "email": {
       "title": "Email drafts",
       "description": "The assistant opens a pre-filled draft in your email app. You review it and press Send yourself.",
+      "descriptionSend": "The assistant shows an email card in the chat. It's sent from your Gmail only when you press Send.",
       "proRequired": "Upgrade to a paid plan to let the assistant draft emails for you.",
       "unavailable": "Email drafts aren't available right now.",
       "targetLabel": "Draft emails in",
@@ -4069,7 +4105,9 @@
         "gmail": "Gmail",
         "outlookWork": "Outlook (work or school)",
         "outlookPersonal": "Outlook.com",
-        "mailto": "Default mail app"
+        "mailto": "Default mail app",
+        "gmailSend": "Send from chat (Gmail)",
+        "gmailSendConnectFirst": "Send from chat (Gmail) · connect Gmail below"
       }
     },
     "slack": {
@@ -4103,15 +4141,52 @@
         "failedBody": "Return to OpenWhispr to try again."
       }
     },
+    "gmail": {
+      "title": "Gmail",
+      "description": "The assistant can send emails from your Gmail account. It can't read your mail, and you press Send on every email yourself.",
+      "connect": "Connect",
+      "reconnect": "Reconnect",
+      "disconnect": "Disconnect",
+      "connecting": "Finish connecting in your browser… If Google says access is blocked, your organization's Google admin needs to allow OpenWhispr.",
+      "connectedAs": "Connected as {{account}}",
+      "needsReconnect": "Gmail needs to be reconnected.",
+      "grantKept": "Disconnected. Google Calendar uses the same Google permission, so OpenWhispr stays listed in your Google Account until you disconnect Google Calendar too.",
+      "proRequired": "Upgrade to a paid plan to let the assistant send emails from Gmail for you.",
+      "errors": {
+        "connect_failed": "Couldn't connect Gmail. Try again.",
+        "disconnect_failed": "Couldn't disconnect Gmail. Try again.",
+        "oauth_denied": "Gmail wasn't connected because access wasn't allowed.",
+        "oauth_timeout": "Connecting took too long. If Google said access is blocked, ask your organization's Google admin to allow OpenWhispr. Otherwise, try again.",
+        "oauth_state_mismatch": "That sign-in link was out of date. Try again.",
+        "ports_busy": "Another app is using the ports OpenWhispr needs to connect. Close it and try again.",
+        "token_exchange_failed": "Google didn't finish connecting. Try again.",
+        "not_configured": "Gmail isn't available in this build.",
+        "connection_changed": "Your account or Gmail connection changed while connecting. Try again.",
+        "signed_out": "Sign in to OpenWhispr to connect Gmail.",
+        "policy_blocked": "Connectors are turned off by your organization.",
+        "policy_unavailable": "Couldn't check your organization's settings. Try again.",
+        "permission_not_granted": "Gmail wasn't connected because permission to send email wasn't granted. Connect again and leave that permission ticked.",
+        "email_not_verified": "Google hasn't verified this account's email address, so Gmail wasn't connected.",
+        "domain_policy": "Your organization's Google admin blocked this app. Ask them to allow OpenWhispr."
+      },
+      "browser": {
+        "connectedTitle": "Gmail is connected",
+        "connectedBody": "You can close this tab and return to OpenWhispr.",
+        "failedTitle": "Gmail wasn't connected",
+        "failedBody": "Return to OpenWhispr to try again."
+      }
+    },
     "recent": {
       "title": "Recent actions",
       "actions": {
         "email_draft": "Draft to {{destination}}",
-        "slack_send_message": "Message to {{destination}}"
+        "slack_send_message": "Message to {{destination}}",
+        "gmail_send": "Email to {{destination}}"
       },
       "unlabeledActions": {
         "email_draft": "Email draft",
-        "slack_send_message": "Slack message"
+        "slack_send_message": "Slack message",
+        "gmail_send": "Gmail email"
       },
       "states": {
         "pending": "Waiting",
@@ -4133,7 +4208,7 @@
       "unknown": "Not confirmed. Check whether it went through before trying again.",
       "draftUnknown": "Not confirmed: the draft to {{destination}} may not have opened. Check before trying again.",
       "contactsFound": "Contacts found: {{total}}",
-      "draftLimit": "Only {{count}} drafts can open per request.",
+      "draftLimit": "Only {{max}} drafts can open per request.",
       "clipboardBusy": "Not opened: another draft's text is still on your clipboard.",
       "errors": {
         "open_failed": "Couldn't open your email app.",
@@ -4152,8 +4227,27 @@
         "credential_save_failed": "Couldn't save the Slack login on this computer. Nothing was sent.",
         "dm_failed": "Couldn't open the direct message. Nothing was sent.",
         "restricted": "That channel is read-only or restricted.",
-        "generic": "That didn't work."
-      }
+        "generic": "That didn't work.",
+        "gmail": {
+          "reconnect_needed": "Gmail needs to be reconnected.",
+          "network": "Couldn't reach Gmail. Nothing was sent.",
+          "rate_limited": "Gmail is busy.",
+          "daily_limit": "Gmail's daily sending limit was reached.",
+          "domain_policy": "Blocked by your organization's Google admin.",
+          "invalid_recipients": "An address isn't valid. Nothing was sent.",
+          "too_many_recipients": "Too many recipients. Nothing was sent.",
+          "too_long": "Too long for Gmail. Nothing was sent.",
+          "invalid_message": "Gmail refused the email. Nothing was sent.",
+          "gmail_unavailable": "Sending with Gmail isn't available right now.",
+          "refused": "Gmail refused to send it.",
+          "connection_changed": "The Gmail connection changed. Nothing was sent.",
+          "credential_save_failed": "Couldn't save the Gmail login on this computer. Nothing was sent."
+        }
+      },
+      "unknownSent": {
+        "gmail": "Couldn't confirm the email to {{destination}} was sent. Check your Gmail Sent folder."
+      },
+      "gmailDraftLimit": "Only {{max}} emails can be prepared per request."
     }
   },
   "notesView": {

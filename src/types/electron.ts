@@ -22,6 +22,8 @@ import type {
   ConnectorPrepareResult,
   ConnectorStatus,
   ContactMatch,
+  NoteAttendee,
+  NoteAttendeesRequest,
 } from "./connectors";
 
 export type LocalTranscriptionProvider = "whisper" | "nvidia" | "cohere";
@@ -1552,7 +1554,8 @@ declare global {
       ) => () => void;
       deleteAccountData?: (
         accountId: string,
-        expectedAuthGeneration: number
+        expectedAuthGeneration: number,
+        options?: { erasingDevice?: boolean }
       ) => Promise<{
         success: boolean;
         code?: string;
@@ -2941,6 +2944,13 @@ declare global {
       connectorFindContacts?: (
         query: string
       ) => Promise<{ contacts: ContactMatch[]; hasMore?: boolean; unavailableReason?: string }>;
+      /**
+       * A note's participants, plus its calendar event's organizer, minus the
+       * user and rooms (main applies find_contact's exclusions).
+       */
+      connectorNoteAttendees?: (
+        request: NoteAttendeesRequest
+      ) => Promise<{ attendees: NoteAttendee[]; unavailableReason?: string }>;
       connectorConnect?: (connectorId: string) => Promise<ConnectorConnectResult>;
       connectorDisconnect?: (connectorId: string) => Promise<ConnectorDisconnectResult>;
       onConnectorStatusChanged?: (callback: (statuses: ConnectorStatus[]) => void) => () => void;
