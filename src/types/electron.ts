@@ -20,6 +20,7 @@ import type {
   ConnectorDisconnectResult,
   ConnectorEdits,
   ConnectorPrepareResult,
+  ConnectorQueryResult,
   ConnectorStatus,
   ContactMatch,
   NoteAttendee,
@@ -2925,6 +2926,12 @@ declare global {
         action: string,
         args: Record<string, unknown>
       ) => Promise<ConnectorPrepareResult>;
+      /** Reads provider data for the model (an issue search); never writes. */
+      connectorQuery?: (
+        connectorId: string,
+        action: string,
+        args: Record<string, unknown>
+      ) => Promise<ConnectorQueryResult>;
       connectorCommit?: (actionId: string, edits: ConnectorEdits) => Promise<ConnectorCommitResult>;
       /** Cancels a pending approval, or a direct run (by its runId) still waiting on policy. */
       connectorCancel?: (

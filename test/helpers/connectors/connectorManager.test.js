@@ -706,6 +706,38 @@ test("a card field the action doesn't declare editable (a typo, say) means no ca
   }
 });
 
+test("an issue or comment card missing a field its layout needs means no card", async () => {
+  const prepareWith = async (verbKey, fields) => {
+    const { manager, log } = await setup({
+      actions: { post: { kind: "approval", editable: { title: "line", body: "text" } } },
+      prepare: async () => ({
+        status: "ready",
+        payload: {},
+        preview: { verbKey, destinationLabel: "ENG", accountLabel: "you", body: "B", fields },
+      }),
+    });
+    return { result: await manager.prepare("fake", "post", { text: "x" }, ALLOWED), log };
+  };
+  // A body-only issue would fall back to the plain layout, whose edits Send drops.
+  for (const [verbKey, fields] of [
+    ["issue", { body: "B" }],
+    ["issue", { title: "T" }],
+    ["comment", { title: "T" }],
+  ]) {
+    const { result, log } = await prepareWith(verbKey, fields);
+    assert.equal(result.errorCode, "invalid_result", `${verbKey} ${JSON.stringify(fields)}`);
+    assert.equal(log.rows.size, 0);
+  }
+  for (const [verbKey, fields] of [
+    ["issue", { title: "T", body: "B" }],
+    ["comment", { body: "B" }],
+    ["email", { body: "B" }],
+  ]) {
+    const { result } = await prepareWith(verbKey, fields);
+    assert.deepEqual(result.preview.fields, fields, verbKey);
+  }
+});
+
 test("a status says whether the connector is configured; only an explicit false hides it", async () => {
   for (const [reported, configured] of [
     [{ connected: false, configured: false }, false],
@@ -2074,4 +2106,164 @@ test("Esc during the Linux mail-app probe stops the draft before it opens or cop
   const [row] = [...log.rows.values()];
   assert.equal(row.state, "cancelled");
   assert.equal(row.errorCode, "cancelled");
+});
+
+const QUERY_ACTIONS = {
+  post: { kind: "approval", editable: { body: "text" } },
+  search: { kind: "query" },
+};
+
+test("a query runs on the bound login, returns normalized items and writes no receipt", async () => {
+  const seen = [];
+  const { manager, log } = await setup({
+    actions: QUERY_ACTIONS,
+    async query(action, args, context) {
+      seen.push({ action, args, context });
+      return {
+        status: "ok",
+        items: [{ reference: "ENG-1", title: "Fix\u0000 login", extra: { nested: true } }],
+      };
+    },
+  });
+
+  const result = await manager.query("fake", "search", { query: "login" }, ALLOWED);
+
+  assert.deepEqual(result, {
+    status: "ok",
+    items: [{ reference: "ENG-1", title: "Fix login" }],
+    truncated: false,
+  });
+  assert.deepEqual(seen, [
+    {
+      action: "search",
+      args: { query: "login" },
+      context: { binding: { accountId: "U1", workspaceId: "T1", generation: 1 } },
+    },
+  ]);
+  assert.equal(log.rows.size, 0, "a read leaves no receipt");
+});
+
+test("a query is refused, in order, before the connector is asked", async () => {
+  let calls = 0;
+  const { manager, fake } = await setup({
+    actions: QUERY_ACTIONS,
+    async query() {
+      calls += 1;
+      return { status: "ok", items: [] };
+    },
+  });
+  const refused = (reason) => ({ status: "unavailable", reason });
+
+  for (const [args, reason] of [
+    [["fake", "search", {}, { policyState: "blocked", accountId: ACCOUNT }], "policy_blocked"],
+    [
+      ["fake", "search", {}, { policyState: "unavailable", accountId: ACCOUNT }],
+      "policy_unavailable",
+    ],
+    [["fake", "search", {}, SIGNED_OUT], "signed_out"],
+    [["nope", "search", {}, ALLOWED], "unknown_connector"],
+    [["fake", "post", {}, ALLOWED], "unknown_action"],
+    // Signed in, but the account changed while the policy was read.
+    [["fake", "search", {}, { policyState: "allowed", accountId: null }], "signed_out"],
+  ]) {
+    assert.deepEqual(await manager.query(...args), refused(reason), reason);
+  }
+
+  fake.setBinding(null);
+  assert.deepEqual(await manager.query("fake", "search", {}, ALLOWED), refused("not_connected"));
+
+  // A login filed under another OpenWhispr account must not answer for this one.
+  fake.setBinding({ ownerAccountId: "account-b", accountId: "U1", generation: 1 });
+  assert.deepEqual(await manager.query("fake", "search", {}, ALLOWED), refused("account_changed"));
+
+  fake.setBinding({ ownerAccountId: ACCOUNT, accountId: "U1", generation: 1 });
+  assert.equal((await manager.query("fake", "search", {}, ALLOWED)).status, "ok");
+  assert.equal(calls, 1, "only the last call reached the connector");
+});
+
+test("a query that throws or answers malformed fails closed, a lost login is broadcast, and logs hold no text", async () => {
+  const logs = [];
+  const statuses = [];
+  let next;
+  const logger = {
+    info: (message, data) => logs.push({ message, data }),
+    warn: (message, data) => logs.push({ message, data }),
+    error: (message, data) => logs.push({ message, data }),
+  };
+  const { manager } = await setup(
+    {
+      actions: QUERY_ACTIONS,
+      async query() {
+        return next();
+      },
+    },
+    undefined,
+    { logger, onStatusChanged: (list) => statuses.push(list) }
+  );
+
+  next = () => {
+    throw new Error("socket hang up https://api.linear.test/?token=secret-token");
+  };
+  assert.deepEqual(await manager.query("fake", "search", {}, ALLOWED), {
+    status: "failed",
+    errorCode: "query_failed",
+    message: "Couldn't search right now.",
+  });
+
+  next = () => ({ status: "ok", items: "not a list" });
+  assert.deepEqual(await manager.query("fake", "search", {}, ALLOWED), {
+    status: "failed",
+    errorCode: "invalid_result",
+    message: "Couldn't read the results.",
+  });
+
+  next = () => ({ status: "failed", errorCode: "reconnect_needed", message: "Reconnect Linear." });
+  assert.equal((await manager.query("fake", "search", {}, ALLOWED)).errorCode, "reconnect_needed");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(statuses.length, 1, "Settings hears that the login is gone");
+
+  next = () => ({
+    status: "ok",
+    items: [{ title: "Private roadmap", url: "https://linear.test/x" }],
+  });
+  await manager.query("fake", "search", { query: "roadmap" }, ALLOWED);
+
+  const finished = logs.filter((entry) => entry.message === "connector query finished");
+  assert.equal(finished.length, 4);
+  assert.deepEqual(finished.at(-1).data, {
+    connectorId: "fake",
+    action: "search",
+    status: "ok",
+    itemCount: 1,
+    truncated: false,
+    errorCode: null,
+  });
+  assert.doesNotMatch(JSON.stringify(logs), /roadmap|linear\.test|secret-token/i);
+});
+
+test("a sent commit may name what it created; nothing else keeps a result label", async () => {
+  const replies = [
+    { state: "sent", url: "https://linear.test/ENG-124", resultLabel: "ENG-124" },
+    { state: "sent", resultLabel: 124 },
+    { state: "unknown", resultLabel: "ENG-125" },
+    { state: "failed", errorCode: "rate_limited", message: "busy", resultLabel: "ENG-126" },
+  ];
+  const { manager } = await setup({
+    async commit() {
+      return replies.shift();
+    },
+  });
+
+  const results = [];
+  for (const text of ["a", "b", "c", "d"]) {
+    const prepared = await manager.prepare("fake", "post", { text }, ALLOWED);
+    results.push(await manager.commit(prepared.actionId, {}, ALLOWED));
+  }
+
+  assert.deepEqual(results, [
+    { state: "sent", url: "https://linear.test/ENG-124", resultLabel: "ENG-124" },
+    { state: "sent" },
+    { state: "unknown" },
+    { state: "failed", errorCode: "rate_limited", message: "busy" },
+  ]);
 });

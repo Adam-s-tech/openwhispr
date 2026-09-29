@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { describeError } = require("./errorSummary");
 const { policyRefusal } = require("./connectorPolicy");
+const { normalizeQueryResult, queryFailed } = require("./queryResult");
 
 const CANCEL_REASONS = new Set(["cancelled_by_user", "conversation_ended", "expired"]);
 
@@ -46,7 +47,13 @@ function normalizeCommitResult(result) {
     case "sent":
       return {
         state: "sent",
-        ...stringFields({ url: result.url, destinationLabel: result.destinationLabel }),
+        // resultLabel names what the send created ("ENG-124"), for the card
+        // and the model; only a created item has one.
+        ...stringFields({
+          url: result.url,
+          destinationLabel: result.destinationLabel,
+          resultLabel: result.resultLabel,
+        }),
       };
     case "failed":
       return failedResult(result);
@@ -144,6 +151,15 @@ function normalizePreviewFields(fields, editable) {
   return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
+// The fields an issue or comment card lays out. Fields without them would
+// drop the card to its plain layout, whose edits Send never commits.
+const LAYOUT_FIELDS = { issue: ["title", "body"], comment: ["body"] };
+
+function hasLayoutFields(verbKey, fields) {
+  const required = Object.hasOwn(LAYOUT_FIELDS, verbKey) ? LAYOUT_FIELDS[verbKey] : [];
+  return required.every((name) => isString(fields[name]));
+}
+
 // The card renders exactly this, so a preview missing a field it needs is
 // malformed rather than shown half empty.
 function normalizePreview(preview, editable) {
@@ -151,7 +167,7 @@ function normalizePreview(preview, editable) {
   const { verbKey, destinationLabel, accountLabel, body } = preview;
   if (![verbKey, destinationLabel, accountLabel, body].every(isString)) return null;
   const fields = normalizePreviewFields(preview.fields, editable);
-  if (fields === false) return null;
+  if (fields === false || (fields && !hasLayoutFields(verbKey, fields))) return null;
   return {
     verbKey,
     destinationLabel,
@@ -778,6 +794,52 @@ function createConnectorManager({
     return result;
   }
 
+  // A read for the model (an issue search). It changes nothing anywhere, so
+  // there is no pending action and no receipt; it still needs the policy, an
+  // account and the bound login, since what it returns leaves the device
+  // with the model's request.
+  async function query(connectorId, action, args, { policyState, accountId }) {
+    const refusal = policyRefusal(policyState);
+    if (refusal) return { status: "unavailable", reason: refusal };
+    const resolved = resolveAction(connectorId, action, "query");
+    if (resolved.error) return { status: "unavailable", reason: resolved.error };
+    if (!accountId) return { status: "unavailable", reason: "signed_out" };
+    const { connector } = resolved;
+
+    const binding = await currentBinding(connector);
+    if (!binding) return { status: "unavailable", reason: "not_connected" };
+    // A login filed under another account must not answer for this one.
+    if (isString(binding.ownerAccountId) && binding.ownerAccountId !== accountId) {
+      return { status: "unavailable", reason: "account_changed" };
+    }
+
+    let result;
+    try {
+      result = normalizeQueryResult(await connector.query(action, args || {}, { binding }));
+    } catch (error) {
+      logger.warn(
+        "connector query threw",
+        { connectorId, action, ...describeError(error) },
+        "connectors"
+      );
+      result = queryFailed();
+    }
+    if (result.errorCode === "reconnect_needed") void notifyStatusChanged();
+    logger.info(
+      "connector query finished",
+      {
+        connectorId,
+        action,
+        status: result.status,
+        itemCount: result.status === "ok" ? result.items.length : 0,
+        truncated: result.status === "ok" && result.truncated,
+        errorCode: result.errorCode || null,
+      },
+      "connectors"
+    );
+    return result;
+  }
+
   function invalidate(connectorId) {
     const removed = pendingActions.invalidateConnector(connectorId);
     for (const actionId of removed) {
@@ -804,6 +866,7 @@ function createConnectorManager({
     commit,
     cancel,
     runDirect,
+    query,
     invalidate,
     recentActions,
     sweepExpired,

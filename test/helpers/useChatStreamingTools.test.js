@@ -75,7 +75,14 @@ async function renderChatStreaming(
     return null;
   }
   renderToStaticMarkup(React.createElement(Harness));
-  return { captured, offeredTools, reasoningService, usePolicyStore, getMessages: () => messages };
+  return {
+    captured,
+    offeredTools,
+    reasoningService,
+    usePolicyStore,
+    getMessages: () => messages,
+    vite,
+  };
 }
 
 // Typed chat, the voice panel and a note's chat opt in; container chat leaves it off.
@@ -155,6 +162,42 @@ test("an org that turns connectors off mid-session removes them from the next se
   assert.equal(offersConnectors(offeredTools[1]), false);
 });
 
+// Review Focus #5 (registration drift): a connector becoming ready after the
+// registry was built must change the registry cache key (readyConnectorIds
+// in useChatStreaming.ts) so the next send's registry is rebuilt and picks
+// up the newly ready connector's tools, not just the ones ready at mount.
+test("a connector that becomes ready mid-session adds its tools to the next send", async (t) => {
+  const { captured, offeredTools, vite } = await renderChatStreaming(t, CONNECTOR_SURFACE, {
+    electronAPI: {
+      connectorStatus: async () => [],
+      onConnectorStatusChanged: () => () => {},
+    },
+  });
+
+  await captured.sendToAI("Email Josh", []);
+  assert.equal(offeredTools[0].includes("slack_send_message"), false);
+  assert.ok(offersConnectors(offeredTools[0]));
+
+  // Simulate the status broadcast a completed Slack connect sends, without
+  // going through the (already-loaded) status loader.
+  const { useConnectorStatusStore } = await vite.ssrLoadModule("/stores/connectorStatusStore.ts");
+  useConnectorStatusStore.setState({
+    loaded: true,
+    statuses: {
+      slack: {
+        id: "slack",
+        connected: true,
+        accountLabel: "chad",
+        workspaceLabel: "Acme",
+        needsReconnect: false,
+      },
+    },
+  });
+
+  await captured.sendToAI("Post to Slack", []);
+  assert.equal(offeredTools[1].includes("slack_send_message"), true);
+});
+
 test("on the AI SDK path a tool step shows the tool's own text, not a bare Done", async (t) => {
   const { captured, reasoningService, getMessages } = await renderChatStreaming(
     t,
@@ -197,6 +240,53 @@ test("on the AI SDK path a tool step shows the tool's own text, not a bare Done"
   assert.equal(assistant.toolCalls[0].result, "Contacts found: 2");
   // The AI SDK tools carry the turn's scope, so a tool's hold reaches the caller.
   assert.equal(holds, 1);
+});
+
+test("a search's items reach the model but are never kept with the conversation", async (t) => {
+  const { captured, reasoningService, getMessages } = await renderChatStreaming(
+    t,
+    CONNECTOR_SURFACE,
+    { settings: BYOK_SETTINGS }
+  );
+  const searchItems = {
+    status: "ok",
+    source: "linear",
+    untrusted: true,
+    items: [{ id: "ENG-1", title: "Someone else's words" }],
+    truncated: false,
+  };
+  reasoningService.processTextStreamingAI.mock.mockImplementation(() =>
+    (async function* () {
+      yield {
+        type: "tool_calls",
+        calls: [
+          { id: "call-1", name: "linear_search_issues", arguments: "{}" },
+          { id: "call-2", name: "get_note", arguments: "{}" },
+        ],
+      };
+      yield {
+        type: "tool_result",
+        callId: "call-1",
+        toolName: "linear_search_issues",
+        displayText: "Done",
+        metadata: searchItems,
+      };
+      yield {
+        type: "tool_result",
+        callId: "call-2",
+        toolName: "get_note",
+        displayText: "Done",
+        metadata: { id: 7, title: "Standup" },
+      };
+      yield { type: "done", finishReason: "stop" };
+    })()
+  );
+
+  await captured.sendToAI("Find the login bug", []);
+
+  const [search, note] = getMessages().find((message) => message.role === "assistant").toolCalls;
+  assert.equal(search.metadata, undefined, "the saved and synced message holds no items");
+  assert.deepEqual(note.metadata, { id: 7, title: "Standup" }, "a note card still gets its data");
 });
 
 test("on the cloud path a tool's hold reaches the caller through the turn's scope", async (t) => {

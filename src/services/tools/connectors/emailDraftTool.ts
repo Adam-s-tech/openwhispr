@@ -20,6 +20,8 @@ import {
   unknownResult,
   userEdits,
 } from "./toolOutcome";
+import { findContactTool } from "./findContactTool";
+import type { ConnectorToolModule } from "./connectorToolModules";
 
 // Enough for "email Josh and Dana each a recap"; a model stuck in a loop, or
 // following an injected instruction, can't bury the user in compose windows
@@ -29,6 +31,11 @@ const MAX_DRAFTS_PER_TURN = 3;
 const GMAIL_RECONNECT_GUIDANCE =
   "Tell the user to reconnect Gmail under Settings → Integrations → Connectors. Don't retry.";
 const GMAIL_UNKNOWN_GUIDANCE = "Tell the user to check their Gmail Sent folder.";
+
+// One line for both paths: the tool's own description says whether a card
+// or the user's mail app sends it.
+const EMAIL_DRAFT_INSTRUCTION =
+  "Use email_draft to draft an email to full email addresses; its description says whether the user sends it from a card in the chat or from their own email app.";
 
 const EMAIL_PARAMETERS: ToolDefinition["parameters"] = {
   type: "object",
@@ -132,6 +139,8 @@ function createGmailSendTool(): ToolDefinition {
       "Write an email for the user to send from their connected Gmail account. It appears on a card in the chat where the user reviews, edits and sends it themselves; nothing is sent until they press Send. `to` and `cc` must be full email addresses; call find_contact first when you only have a name.",
     parameters: EMAIL_PARAMETERS,
     readOnly: false,
+    connectorId: "email",
+    promptInstruction: EMAIL_DRAFT_INSTRUCTION,
 
     async execute(
       args: Record<string, unknown>,
@@ -189,6 +198,8 @@ function createComposeDraftTool(target: ComposeTarget): ToolDefinition {
       "Open a pre-filled email draft in the user's email app so they can review and send it themselves. This never sends email. `to` and `cc` must be full email addresses; call find_contact first when you only have a name.",
     parameters: EMAIL_PARAMETERS,
     readOnly: false,
+    connectorId: "email",
+    promptInstruction: EMAIL_DRAFT_INSTRUCTION,
 
     async execute(
       args: Record<string, unknown>,
@@ -316,3 +327,10 @@ function createComposeDraftTool(target: ComposeTarget): ToolDefinition {
 export function createEmailDraftTool(target: EmailDraftTarget): ToolDefinition {
   return target === "gmailSend" ? createGmailSendTool() : createComposeDraftTool(target);
 }
+
+/** Email tools need no login of their own: compose windows, or Gmail's card. */
+export const emailToolModule: ConnectorToolModule = {
+  connectorId: "email",
+  requiresConnection: false,
+  createTools: (env) => [findContactTool, createEmailDraftTool(env.emailDraftTarget)],
+};

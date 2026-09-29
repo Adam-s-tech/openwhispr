@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import { SettingsPanelRow } from "../ui/SettingsSection";
 import { RecentActions } from "./RecentActions";
 import { ensureConnectorStatus, useConnectorStatusStore } from "../../stores/connectorStatusStore";
-import type { ConnectorStatus } from "../../types/connectors";
+import type { ConnectorRowSpec } from "./connectorRows";
 
 type RowPhase = "idle" | "connecting" | "disconnecting";
 
@@ -29,15 +29,10 @@ const ROW_ERRORS = new Set([
 ]);
 
 export interface ConnectorLoginRowProps {
-  connectorId: "slack" | "gmail";
+  row: ConnectorRowSpec;
   isPaid: boolean;
   blockedByOrg: boolean;
   onUpgrade: () => void;
-  /** Values for `connectors.<id>.connectedAs`. */
-  accountSummary: (status: ConnectorStatus) => Record<string, string>;
-  icon: ReactNode;
-  /** A full-colour brand mark sits on a white tile, like the calendar rows'. */
-  brandIcon?: boolean;
 }
 
 /**
@@ -46,14 +41,18 @@ export interface ConnectorLoginRowProps {
  * `connectors.<connectorId>.*`.
  */
 export function ConnectorLoginRow({
-  connectorId,
+  row,
   isPaid,
   blockedByOrg,
   onUpgrade,
-  accountSummary,
-  icon,
-  brandIcon = false,
 }: ConnectorLoginRowProps): ReactElement | null {
+  const {
+    id: connectorId,
+    icon,
+    brandIcon = false,
+    accountSummary,
+    connectingDetail: ConnectingDetail,
+  } = row;
   const { t } = useTranslation();
   const status = useConnectorStatusStore((state) => state.statuses[connectorId]);
   const [phase, setPhase] = useState<RowPhase>("idle");
@@ -146,6 +145,9 @@ export function ConnectorLoginRow({
           <p className="text-xs text-muted-foreground/70 mt-0.5 leading-relaxed" dir="auto">
             {summary}
           </p>
+          {phase === "connecting" && ConnectingDetail && (
+            <ConnectingDetail connectorId={connectorId} />
+          )}
           {/* Mounted before the note arrives, so a screen reader announces it. */}
           <div role="status" className="text-xs text-muted-foreground" dir="auto">
             {grantKept && <p className="mt-1">{copy("grantKept")}</p>}
