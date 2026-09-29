@@ -39,6 +39,7 @@ jest.mock('@/data', () => ({
       { id: 2, name: 'Meetings', isDefault: 1, sortOrder: 1, deletedAt: null },
       { id: 1, name: 'Personal', isDefault: 1, sortOrder: 0, deletedAt: null },
     ]),
+    getFolders: jest.fn(() => []),
     createNote: jest.fn(() => ({ id: 7, title: 'Untitled meeting', noteType: 'meeting' })),
     getNoteById: jest.fn(() => null),
     updateNote: jest.fn(),
@@ -65,6 +66,13 @@ jest.mock('@/data', () => ({
     updateSpeakerProfile: jest.fn(),
     deleteSpeakerProfile: jest.fn(),
     deleteAllSpeakerProfiles: jest.fn(),
+  },
+  spacesRepository: {
+    getPrivateSpace: jest.fn(() => ({ id: 1, kind: 'private' })),
+    listSpaces: jest.fn(() => [
+      { id: 1, kind: 'private' },
+      { id: 3, kind: 'team' },
+    ]),
   },
 }));
 jest.mock('@/store/useProcessingModeStore', () => ({
@@ -109,7 +117,7 @@ jest.mock('@/services/transcription/LocalTranscriptionService', () => ({
 }));
 
 import { useNotesStore } from '../useNotesStore';
-import { notesRepository } from '@/data';
+import { notesRepository, spacesRepository } from '@/data';
 import { ReasoningService } from '@/services/reasoning/ReasoningService';
 import { generateLocalMeetingNotes } from '@/lib/notes/localMeetingNotes';
 import * as localReasoning from '@/lib/localReasoning';
@@ -237,6 +245,80 @@ describe('createMeetingNote', () => {
     useNotesStore.getState().createMeetingNote();
 
     expect(notesRepository.createNote).toHaveBeenCalledWith('Untitled meeting', '', 1);
+  });
+
+  describe('started from a folder or space', () => {
+    const PERSONAL_FOLDER = { id: 5, name: 'Clients', spaceId: 1, deletedAt: null };
+    const TEAM_FOLDER = { id: 9, name: 'Team', spaceId: 3, deletedAt: null };
+    const getFolders = notesRepository.getFolders as jest.Mock;
+    const getPrivateFolders = notesRepository.getPrivateFolders as jest.Mock;
+    const defaultGetFolders = getFolders.getMockImplementation();
+    const defaultGetPrivateFolders = getPrivateFolders.getMockImplementation();
+
+    beforeEach(() => {
+      getFolders.mockReturnValue([PERSONAL_FOLDER, TEAM_FOLDER]);
+      getPrivateFolders.mockReturnValue([
+        { id: 2, name: 'Meetings', isDefault: 1, sortOrder: 1, spaceId: 1, deletedAt: null },
+        PERSONAL_FOLDER,
+      ]);
+    });
+
+    // clearAllMocks keeps implementations, so the folders above would leak into later tests.
+    afterEach(() => {
+      getFolders.mockImplementation(defaultGetFolders);
+      getPrivateFolders.mockImplementation(defaultGetPrivateFolders);
+    });
+
+    it('files the meeting in the folder it was started from', () => {
+      useNotesStore.getState().createMeetingNote({ folderId: 5 });
+      expect(notesRepository.createNote).toHaveBeenCalledWith('Untitled meeting', '', 5);
+    });
+
+    it("files it in a team space's folder, or in the space itself with no folder open", () => {
+      useNotesStore.getState().createMeetingNote({ folderId: 9 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 9);
+
+      useNotesStore.getState().createMeetingNote({ spaceId: 3 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith(
+        'Untitled meeting',
+        '',
+        undefined,
+        3,
+      );
+    });
+
+    it('keeps a Private-mode meeting out of team spaces, in Meetings', () => {
+      mockProcessingModeState.activeMode = 'private';
+
+      useNotesStore.getState().createMeetingNote({ folderId: 9 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      useNotesStore.getState().createMeetingNote({ spaceId: 3 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      useNotesStore.getState().createMeetingNote({ folderId: 5 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 5);
+    });
+
+    it('uses Meetings when the team space is unknown, gone, or not a number', () => {
+      useNotesStore.getState().createMeetingNote({ spaceId: 404 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      useNotesStore.getState().createMeetingNote({ spaceId: Number('abc') });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+
+      // Access to space 3 was removed while its screen was still open.
+      (spacesRepository.listSpaces as jest.Mock).mockReturnValueOnce([{ id: 1, kind: 'private' }]);
+      useNotesStore.getState().createMeetingNote({ spaceId: 3 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      (spacesRepository.listSpaces as jest.Mock).mockReturnValueOnce([{ id: 1, kind: 'private' }]);
+      useNotesStore.getState().createMeetingNote({ folderId: 9 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+    });
+
+    it('uses Meetings when the folder is gone, or the space is the personal one', () => {
+      useNotesStore.getState().createMeetingNote({ folderId: 404 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+      useNotesStore.getState().createMeetingNote({ spaceId: 1 });
+      expect(notesRepository.createNote).toHaveBeenLastCalledWith('Untitled meeting', '', 2);
+    });
   });
 
   it('persists selected calendar context locally', () => {

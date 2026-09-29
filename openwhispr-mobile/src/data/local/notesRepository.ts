@@ -16,6 +16,7 @@ import {
 import * as FileSystem from 'expo-file-system/legacy';
 import { parseRemoteTranscript, serializeSegmentsForSync } from '@/lib/notes/remoteTranscript';
 import { randomUUID } from '@/lib/uuid';
+import { isFolderAwaitingUpload } from '@/lib/notes/folderUpload';
 import {
   folderDeleteJournal,
   folders,
@@ -864,12 +865,22 @@ export class LocalNotesRepository implements NotesRepository {
     localFolderId: number | null,
     options: ApplyRemoteNoteOptions & { forceTranscript?: boolean } = {},
   ): void {
+    // A note filed in a folder the server has never seen reaches it unfiled, so a null
+    // coming back keeps the note in that folder. While the folder is still on its way up,
+    // the note is queued again, and pushNotes sends it once the folder has a cloud id.
+    // A team pass that moves the note to another space is followed: the folder stays behind.
+    const folderUnknownToServer =
+      remote.folder_id == null ? this.getFolderUnknownToServer(local.folderId) : null;
+    const unsyncedFolder =
+      options.spaceId === undefined || folderUnknownToServer?.spaceId === options.spaceId
+        ? folderUnknownToServer
+        : null;
     this.database
       .update(notes)
       .set({
         title: remote.title ?? 'Untitled',
         content: remote.content,
-        folderId: localFolderId,
+        folderId: unsyncedFolder ? unsyncedFolder.id : localFolderId,
         noteType: remote.note_type,
         // Device-local recordings push as null, so a null coming back must not erase the
         // path this device still plays and reprocesses from.
@@ -884,7 +895,7 @@ export class LocalNotesRepository implements NotesRepository {
         clientNoteId: remote.client_note_id ?? local.clientNoteId,
         remoteId: remote.id,
         deletedAt: null,
-        pendingSync: 0,
+        pendingSync: isFolderAwaitingUpload(unsyncedFolder) ? 1 : 0,
         conflictServerNote: null,
         // Only the team pass relocates an existing note; without an explicit
         // space the row keeps whatever space it already sits in.
@@ -948,6 +959,16 @@ export class LocalNotesRepository implements NotesRepository {
 
   getFolderByRemoteId(remoteId: string): Folder | null {
     return this.database.select().from(folders).where(eq(folders.remoteId, remoteId)).get() ?? null;
+  }
+
+  private getFolderUnknownToServer(folderId: number | null): Folder | null {
+    if (folderId == null) return null;
+    const folder = this.database
+      .select()
+      .from(folders)
+      .where(and(eq(folders.id, folderId), isNull(folders.deletedAt)))
+      .get();
+    return folder && !folder.remoteId ? folder : null;
   }
 
   private resolveFolderByRemoteId(serverFolderId: string | null): number | null {
