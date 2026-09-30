@@ -681,20 +681,7 @@ class IPCHandlers {
     resolveSystemDefaultMicrophone();
     this.setupHandlers();
     // Lives for the app's lifetime; IPCHandlers has no teardown path.
-    tokenStore.subscribe(({ generation, token }) => {
-      this.enterpriseIdentityManager?.clear();
-      if (!token) {
-        this.databaseManager.setActiveAccountId(null);
-        accountScopeBinding.clear();
-        broadcastToWindows("active-account-scope-changed", null);
-      }
-      broadcastToWindows("auth-token-state-changed", {
-        generation,
-        hasToken: Boolean(token),
-      });
-      // A sign-out or another account changes whose login shows.
-      void this.connectorManager?.notifyStatusChanged();
-    });
+    tokenStore.subscribe((state) => this._handleAuthTokenChange(state));
 
     if (this.whisperManager?.serverManager) {
       // Remember the failed backend so it isn't re-attempted (and its model
@@ -716,6 +703,23 @@ class IPCHandlers {
         this._syncStartupEnv({}, ["WHISPER_VULKAN_DEVICE"]);
       });
     }
+  }
+
+  _handleAuthTokenChange({ generation, token }) {
+    this.enterpriseIdentityManager?.clear();
+    if (!token) {
+      this.databaseManager.setActiveAccountId(null);
+      accountScopeBinding.clear();
+      broadcastToWindows("active-account-scope-changed", null);
+      // As set-active-account-scope does: a connect can't outlive its account.
+      this.connectorManager?.accountChanged();
+    }
+    broadcastToWindows("auth-token-state-changed", {
+      generation,
+      hasToken: Boolean(token),
+    });
+    // A sign-out or another account changes whose login shows.
+    void this.connectorManager?.notifyStatusChanged();
   }
 
   // Reconstructing counters from the transcripts already on disk records exactly
@@ -2216,6 +2220,7 @@ class IPCHandlers {
         "active-account-scope-changed",
         accountId !== null ? { accountId, authGeneration: state.generation } : null
       );
+      this.connectorManager?.accountChanged();
       void this.connectorManager?.notifyStatusChanged();
       return { success: true };
     });
