@@ -2774,7 +2774,7 @@
     "sidebar": {
       "newNote": "新增筆記",
       "searchNotes": "搜尋筆記",
-      "actions": "動作"
+      "templatesAndActions": "範本與動作"
     },
     "spaces": {
       "privateSpaces": "私人筆記",
@@ -3139,8 +3139,8 @@
       "showInFileManager": "在{{manager}}中顯示"
     },
     "actions": {
+      "allActions": "全部動作",
       "manage": "管理動作...",
-      "manageTitle": "自訂動作",
       "addAction": "新增動作",
       "editAction": "編輯動作",
       "namePlaceholder": "動作名稱",
@@ -3154,8 +3154,6 @@
       "promptLabel": "提示詞",
       "emptyEditorTitle": "選擇動作",
       "emptyEditorDescription": "從列表中選擇一個動作或建立新動作",
-      "runAction": "執行 {{name}}",
-      "selectAction": "選擇動作",
       "done": "完成",
       "chunkProgress": "第 {{step}} 部分，共 {{total}} 部分",
       "emptyReply": "模型傳回了空白回覆。請再試一次，或選擇其他模型。",
@@ -3170,15 +3168,89 @@
           "cta": "草擬跟進郵件"
         },
         "detailedNotes": {
-          "name": "詳細筆記",
+          "name": "AI 摘要",
           "description": "準確、完整的會議筆記，包含決策和行動項目"
+        },
+        "makeTodos": {
+          "name": "建立待辦事項",
+          "description": "在聊天中列出每項待辦及其負責人"
+        },
+        "createOutline": {
+          "name": "建立大綱",
+          "description": "在聊天中為筆記的主題列出大綱"
+        },
+        "oneOnOne": {
+          "name": "1 對 1",
+          "description": "一對一會議中的近況、回饋、成長和後續步驟"
+        },
+        "standUp": {
+          "name": "站會",
+          "description": "每個人的進度、計畫和阻礙"
+        },
+        "salesCall": {
+          "name": "銷售通話",
+          "description": "需求、異議、預算和決策流程"
+        },
+        "userInterview": {
+          "name": "使用者訪談",
+          "description": "參與者的工作流程、痛點、反應和原話"
+        },
+        "shorten": {
+          "name": "精簡",
+          "description": "把摘要縮短到大約一半",
+          "cta": "精簡摘要"
+        },
+        "addTldr": {
+          "name": "新增 TL;DR",
+          "description": "在摘要開頭加上兩三句話的 TL;DR",
+          "cta": "新增 TL;DR"
+        },
+        "slackUpdate": {
+          "name": "Slack 更新",
+          "description": "寫一則發到 Slack 的簡短團隊更新",
+          "cta": "寫一則 Slack 更新"
         }
       },
       "errors": {
         "noModel": "未選擇 AI 模型。請在設定中進行配置。",
         "actionFailed": "操作失敗",
-        "noEndpoint": "未設定自架伺服器 URL。請在設定中進行配置。"
-      }
+        "noEndpoint": "未設定自架伺服器 URL。請在設定中進行配置。",
+        "outputTruncated": "AI 模型在完成之前就用完了輸出空間，因此筆記維持不變。",
+        "nothingToSummarize": "這則筆記還沒有可以摘要的內容，因此 AI 摘要維持不變。",
+        "saveFailed": "無法儲存。請檢查是否有內容過長，然後再試一次。"
+      },
+      "tab": "動作",
+      "output": {
+        "auto": "自動",
+        "chat": "聊天",
+        "summary": "AI 摘要",
+        "chatHint": "在筆記的聊天中回覆，AI 摘要維持不變。",
+        "summaryHint": "編輯筆記的 AI 摘要；如果還沒有摘要，就根據轉錄內容產生一份。",
+        "autoHint": "儲存時讀取提示詞，並選擇聊天或 AI 摘要。"
+      },
+      "applied": "已使用 {{name}} 更新 AI 摘要"
+    },
+    "templates": {
+      "tab": "範本",
+      "managerTitle": "範本與動作",
+      "manage": "管理範本...",
+      "select": "選擇範本",
+      "addTemplate": "新增範本",
+      "editTemplate": "編輯範本",
+      "namePlaceholder": "範本名稱",
+      "contextLabel": "背景",
+      "contextPlaceholder": "這是什麼類型的會議？摘要應著重在什麼？",
+      "sectionsLabel": "段落",
+      "addSection": "新增段落",
+      "sectionHeadingPlaceholder": "段落標題",
+      "sectionInstructionPlaceholder": "這個段落要寫什麼？",
+      "moveSectionUp": "上移段落",
+      "moveSectionDown": "下移段落",
+      "removeSection": "移除段落",
+      "noSectionsHint": "沒有段落時，背景就是摘要的完整指示。",
+      "noTemplates": "尚無範本",
+      "emptyEditorTitle": "選擇範本",
+      "emptyEditorDescription": "從列表中選擇一個範本或建立新範本"
     },
     "empty": {
       "title": "這裡還沒有筆記",
@@ -3202,12 +3274,12 @@
         "description": "動作使用 AI 來處理你的筆記。設定語言模型以開始使用。",
         "configured": "AI 模型已設定"
       },
-      "actions": {
-        "title": "AI 驅動的動作",
-        "description": "動作可以處理你的筆記——整理轉錄、摘要會議等。使用內建動作或建立你自己的。",
-        "builtInLabel": "內建",
-        "createTitle": "建立你的動作",
-        "createDescription": "使用你自己的 AI 提示詞定義自訂動作。你隨時可以在設定中編輯或新增更多。",
+      "templates": {
+        "title": "範本與動作",
+        "description": "範本決定 AI 摘要的樣式，從詳細的會議記錄到你自訂的段落。動作在筆記上執行，例如在聊天中草擬跟進郵件。",
+        "builtInLabel": "你的範本",
+        "createTitle": "建立你的範本",
+        "createDescription": "描述你想要的摘要。你之後可以新增段落、更多範本與動作。",
         "created": "已建立！"
       },
       "getStarted": "開始使用",
@@ -3684,7 +3756,8 @@
       "thinking": "正在思考...",
       "typeMessage": "輸入訊息...",
       "send": "傳送",
-      "voiceDraftStreamingOnly": "目前的轉錄服務商僅支援即時聽寫，因此無法使用語音輸入。請在「設定 → 語音轉文字」中選擇其他服務商。"
+      "voiceDraftStreamingOnly": "目前的轉錄服務商僅支援即時聽寫，因此無法使用語音輸入。請在「設定 → 語音轉文字」中選擇其他服務商。",
+      "commands": "指令"
     },
     "tools": {
       "search_notesName": "搜尋筆記",
@@ -4544,9 +4617,7 @@
     "conversationSelector": "切換對話",
     "history": "歷史記錄",
     "quickActions": "快速操作",
-    "generateSummary": "產生摘要",
-    "makeTodos": "建立待辦事項",
-    "createOutline": "建立大綱"
+    "generateSummary": "產生摘要"
   },
   "transcriptionPreview": {
     "label": "預覽",

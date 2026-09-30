@@ -2774,7 +2774,7 @@
     "sidebar": {
       "newNote": "Nuova nota",
       "searchNotes": "Cerca note",
-      "actions": "Azioni"
+      "templatesAndActions": "Modelli e azioni"
     },
     "spaces": {
       "privateSpaces": "Note private",
@@ -3139,8 +3139,8 @@
       "showInFileManager": "Mostra in {{manager}}"
     },
     "actions": {
+      "allActions": "Tutte le azioni",
       "manage": "Gestisci azioni...",
-      "manageTitle": "Azioni personalizzate",
       "addAction": "Nuova azione",
       "editAction": "Modifica azione",
       "namePlaceholder": "Nome dell'azione",
@@ -3154,8 +3154,6 @@
       "promptLabel": "Istruzione",
       "emptyEditorTitle": "Seleziona un'azione",
       "emptyEditorDescription": "Scegli un'azione dall'elenco o creane una nuova",
-      "runAction": "Esegui {{name}}",
-      "selectAction": "Seleziona azione",
       "done": "Fatto",
       "chunkProgress": "Parte {{step}} di {{total}}",
       "emptyReply": "Il modello ha restituito una risposta vuota. Riprova o scegli un altro modello.",
@@ -3170,15 +3168,89 @@
           "cta": "Scrivi un'email di follow-up"
         },
         "detailedNotes": {
-          "name": "Note dettagliate",
+          "name": "Riepilogo AI",
           "description": "Note di riunione accurate e complete con decisioni e azioni"
+        },
+        "makeTodos": {
+          "name": "Crea attività",
+          "description": "Elenca ogni attività e il suo responsabile nella chat"
+        },
+        "createOutline": {
+          "name": "Crea scaletta",
+          "description": "Organizza gli argomenti della nota nella chat"
+        },
+        "oneOnOne": {
+          "name": "1:1",
+          "description": "Aggiornamenti, feedback, crescita e prossimi passi di un incontro individuale"
+        },
+        "standUp": {
+          "name": "Stand-up",
+          "description": "Progressi, piani e blocchi di ciascuno"
+        },
+        "salesCall": {
+          "name": "Chiamata di vendita",
+          "description": "Esigenze, obiezioni, budget e processo decisionale"
+        },
+        "userInterview": {
+          "name": "Intervista utente",
+          "description": "Flusso di lavoro, problemi, reazioni e citazioni di un partecipante"
+        },
+        "shorten": {
+          "name": "Accorcia",
+          "description": "Rendi il riepilogo lungo circa la metà",
+          "cta": "Accorcia il riepilogo"
+        },
+        "addTldr": {
+          "name": "Aggiungi TL;DR",
+          "description": "Metti un TL;DR di due o tre frasi all'inizio del riepilogo",
+          "cta": "Aggiungi un TL;DR"
+        },
+        "slackUpdate": {
+          "name": "Aggiornamento Slack",
+          "description": "Scrivi un breve aggiornamento per il team da pubblicare su Slack",
+          "cta": "Scrivi un aggiornamento Slack"
         }
       },
       "errors": {
         "noModel": "Nessun modello IA selezionato. Configurane uno nelle Impostazioni.",
         "actionFailed": "Azione non riuscita",
-        "noEndpoint": "Nessun URL del server self-hosted impostato. Configurane uno nelle Impostazioni."
-      }
+        "noEndpoint": "Nessun URL del server self-hosted impostato. Configurane uno nelle Impostazioni.",
+        "outputTruncated": "Il modello AI ha esaurito lo spazio prima di finire, quindi la nota è rimasta com'era.",
+        "nothingToSummarize": "Questa nota non ha ancora nulla da riassumere, quindi il riepilogo AI è rimasto invariato.",
+        "saveFailed": "Impossibile salvare. Controlla che nulla sia troppo lungo e riprova."
+      },
+      "tab": "Azioni",
+      "output": {
+        "auto": "Automatico",
+        "chat": "Chat",
+        "summary": "Riepilogo AI",
+        "chatHint": "Risponde nella chat della nota e lascia invariato il riepilogo AI.",
+        "summaryHint": "Modifica il riepilogo AI della nota, oppure lo scrive dalla trascrizione se non c'è ancora.",
+        "autoHint": "Legge il prompt al salvataggio e sceglie la chat o il riepilogo AI."
+      },
+      "applied": "Riepilogo AI aggiornato con {{name}}"
+    },
+    "templates": {
+      "tab": "Modelli",
+      "managerTitle": "Modelli e azioni",
+      "manage": "Gestisci modelli...",
+      "select": "Scegli modello",
+      "addTemplate": "Nuovo modello",
+      "editTemplate": "Modifica modello",
+      "namePlaceholder": "Nome del modello",
+      "contextLabel": "Contesto",
+      "contextPlaceholder": "Che tipo di riunione è e su cosa deve concentrarsi il riepilogo?",
+      "sectionsLabel": "Sezioni",
+      "addSection": "Aggiungi sezione",
+      "sectionHeadingPlaceholder": "Titolo della sezione",
+      "sectionInstructionPlaceholder": "Cosa va in questa sezione?",
+      "moveSectionUp": "Sposta la sezione su",
+      "moveSectionDown": "Sposta la sezione giù",
+      "removeSection": "Rimuovi sezione",
+      "noSectionsHint": "Senza sezioni, il contesto è l'intera istruzione per il riepilogo.",
+      "noTemplates": "Nessun modello ancora",
+      "emptyEditorTitle": "Seleziona un modello",
+      "emptyEditorDescription": "Scegli un modello dall'elenco o creane uno nuovo"
     },
     "empty": {
       "title": "Ancora nessuna nota qui",
@@ -3202,13 +3274,13 @@
         "description": "Le azioni usano l'IA per trasformare le tue note. Configura un modello linguistico per iniziare.",
         "configured": "Modello IA configurato"
       },
-      "actions": {
-        "title": "Azioni basate sull'IA",
-        "description": "Le azioni trasformano le tue note: correggono le trascrizioni, riassumono le riunioni e altro ancora. Usa le azioni integrate o creane di tue.",
-        "builtInLabel": "Integrata",
-        "createTitle": "Crea la tua azione",
-        "createDescription": "Definisci un'azione personalizzata con il tuo prompt IA. Puoi sempre modificarle o aggiungerne altre nelle impostazioni.",
-        "created": "Creata!"
+      "templates": {
+        "title": "Modelli e azioni",
+        "description": "I modelli danno forma al tuo riepilogo AI, dalle note di riunione dettagliate alle sezioni che definisci tu. Le azioni si eseguono su una nota, come scrivere un'email di follow-up nella chat.",
+        "builtInLabel": "I tuoi modelli",
+        "createTitle": "Crea il tuo modello",
+        "createDescription": "Descrivi il riepilogo che desideri. Puoi aggiungere sezioni, altri modelli e azioni in seguito.",
+        "created": "Creato!"
       },
       "getStarted": "Inizia",
       "systemAudio": {
@@ -3684,7 +3756,8 @@
       "thinking": "Pensiero...",
       "typeMessage": "Scrivi un messaggio...",
       "send": "Invia",
-      "voiceDraftStreamingOnly": "L'input vocale non è disponibile con il tuo provider di trascrizione: supporta solo la dettatura dal vivo. Scegli un altro provider in Impostazioni → Da voce a testo."
+      "voiceDraftStreamingOnly": "L'input vocale non è disponibile con il tuo provider di trascrizione: supporta solo la dettatura dal vivo. Scegli un altro provider in Impostazioni → Da voce a testo.",
+      "commands": "Comandi"
     },
     "tools": {
       "search_notesName": "Cerca nelle note",
@@ -4544,9 +4617,7 @@
     "conversationSelector": "Cambia conversazione",
     "history": "Cronologia",
     "quickActions": "Azioni rapide",
-    "generateSummary": "Genera riepilogo",
-    "makeTodos": "Crea attività",
-    "createOutline": "Crea scaletta"
+    "generateSummary": "Genera riepilogo"
   },
   "transcriptionPreview": {
     "label": "Anteprima",

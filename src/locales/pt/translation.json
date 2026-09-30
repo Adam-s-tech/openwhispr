@@ -2774,7 +2774,7 @@
     "sidebar": {
       "newNote": "Nova nota",
       "searchNotes": "Pesquisar notas",
-      "actions": "Ações"
+      "templatesAndActions": "Modelos e ações"
     },
     "spaces": {
       "privateSpaces": "Notas privadas",
@@ -3139,8 +3139,8 @@
       "showInFileManager": "Mostrar no {{manager}}"
     },
     "actions": {
+      "allActions": "Todas as ações",
       "manage": "Gerenciar ações...",
-      "manageTitle": "Ações personalizadas",
       "addAction": "Nova ação",
       "editAction": "Editar ação",
       "namePlaceholder": "Nome da ação",
@@ -3154,8 +3154,6 @@
       "promptLabel": "Instrução",
       "emptyEditorTitle": "Selecionar ação",
       "emptyEditorDescription": "Escolha uma ação da lista ou crie uma nova",
-      "runAction": "Executar {{name}}",
-      "selectAction": "Selecionar ação",
       "done": "Concluído",
       "chunkProgress": "Parte {{step}} de {{total}}",
       "emptyReply": "O modelo retornou uma resposta vazia. Tente novamente ou escolha outro modelo.",
@@ -3170,15 +3168,89 @@
           "cta": "Redigir e-mail de acompanhamento"
         },
         "detailedNotes": {
-          "name": "Notas detalhadas",
+          "name": "Resumo com IA",
           "description": "Notas de reunião precisas e completas com decisões e ações"
+        },
+        "makeTodos": {
+          "name": "Criar tarefas",
+          "description": "Lista cada tarefa e seu responsável no chat"
+        },
+        "createOutline": {
+          "name": "Criar esboço",
+          "description": "Organiza os tópicos da nota no chat"
+        },
+        "oneOnOne": {
+          "name": "1:1",
+          "description": "Atualizações, feedback, desenvolvimento e próximos passos de uma reunião individual"
+        },
+        "standUp": {
+          "name": "Stand-up",
+          "description": "Progresso, planos e bloqueios de cada pessoa"
+        },
+        "salesCall": {
+          "name": "Chamada de vendas",
+          "description": "Necessidades, objeções, orçamento e processo de decisão"
+        },
+        "userInterview": {
+          "name": "Entrevista com usuário",
+          "description": "Fluxo de trabalho, dificuldades, reações e citações de um participante"
+        },
+        "shorten": {
+          "name": "Encurtar",
+          "description": "Deixe o resumo com cerca de metade do tamanho",
+          "cta": "Encurtar o resumo"
+        },
+        "addTldr": {
+          "name": "Adicionar TL;DR",
+          "description": "Coloque um TL;DR de duas ou três frases no início do resumo",
+          "cta": "Adicionar um TL;DR"
+        },
+        "slackUpdate": {
+          "name": "Atualização no Slack",
+          "description": "Escreva uma breve atualização para a equipe no Slack",
+          "cta": "Escrever uma atualização no Slack"
         }
       },
       "errors": {
         "noModel": "Nenhum modelo de IA selecionado. Configure um nas Configurações.",
         "actionFailed": "A ação falhou",
-        "noEndpoint": "Nenhum URL de servidor auto-hospedado definido. Configure um nas Configurações."
-      }
+        "noEndpoint": "Nenhum URL de servidor auto-hospedado definido. Configure um nas Configurações.",
+        "outputTruncated": "O modelo de IA ficou sem espaço antes de terminar, então a nota ficou como estava.",
+        "nothingToSummarize": "Esta nota ainda não tem nada para resumir, então o resumo com IA ficou como estava.",
+        "saveFailed": "Não foi possível salvar. Verifique se nada está longo demais e tente novamente."
+      },
+      "tab": "Ações",
+      "output": {
+        "auto": "Automático",
+        "chat": "Chat",
+        "summary": "Resumo com IA",
+        "chatHint": "Responde no chat da nota e deixa o resumo com IA como está.",
+        "summaryHint": "Edita o resumo com IA da nota, ou escreve um a partir da transcrição se ainda não houver.",
+        "autoHint": "Lê o prompt ao salvar e escolhe o chat ou o resumo com IA."
+      },
+      "applied": "Resumo com IA atualizado com {{name}}"
+    },
+    "templates": {
+      "tab": "Modelos",
+      "managerTitle": "Modelos e ações",
+      "manage": "Gerenciar modelos...",
+      "select": "Escolher modelo",
+      "addTemplate": "Novo modelo",
+      "editTemplate": "Editar modelo",
+      "namePlaceholder": "Nome do modelo",
+      "contextLabel": "Contexto",
+      "contextPlaceholder": "Que tipo de reunião é esta e em que o resumo deve se concentrar?",
+      "sectionsLabel": "Seções",
+      "addSection": "Adicionar seção",
+      "sectionHeadingPlaceholder": "Título da seção",
+      "sectionInstructionPlaceholder": "O que entra nesta seção?",
+      "moveSectionUp": "Mover seção para cima",
+      "moveSectionDown": "Mover seção para baixo",
+      "removeSection": "Remover seção",
+      "noSectionsHint": "Sem seções, o contexto é a instrução completa para o resumo.",
+      "noTemplates": "Nenhum modelo ainda",
+      "emptyEditorTitle": "Selecionar modelo",
+      "emptyEditorDescription": "Escolha um modelo da lista ou crie um novo"
     },
     "empty": {
       "title": "Ainda não há notas aqui",
@@ -3202,13 +3274,13 @@
         "description": "As ações usam IA para transformar suas notas. Configure um modelo de linguagem para começar.",
         "configured": "Modelo de IA configurado"
       },
-      "actions": {
-        "title": "Ações com IA",
-        "description": "As ações transformam suas notas — limpam transcrições, resumem reuniões e muito mais. Use ações integradas ou crie as suas.",
-        "builtInLabel": "Integrada",
-        "createTitle": "Crie sua própria ação",
-        "createDescription": "Defina uma ação personalizada com seu próprio prompt de IA. Você sempre pode editar ou adicionar mais nas configurações.",
-        "created": "Criada!"
+      "templates": {
+        "title": "Modelos e ações",
+        "description": "Os modelos dão forma ao seu resumo com IA, de notas de reunião detalhadas a seções que você define. As ações rodam sobre uma nota, como escrever um e-mail de acompanhamento no chat.",
+        "builtInLabel": "Seus modelos",
+        "createTitle": "Crie seu próprio modelo",
+        "createDescription": "Descreva o resumo que você quer. Você pode adicionar seções, mais modelos e ações depois.",
+        "created": "Criado!"
       },
       "getStarted": "Começar",
       "systemAudio": {
@@ -3684,7 +3756,8 @@
       "thinking": "Pensando...",
       "typeMessage": "Digite uma mensagem...",
       "send": "Enviar",
-      "voiceDraftStreamingOnly": "A entrada por voz não está disponível com seu provedor de transcrição: ele só suporta ditado ao vivo. Escolha outro provedor em Configurações → Fala para texto."
+      "voiceDraftStreamingOnly": "A entrada por voz não está disponível com seu provedor de transcrição: ele só suporta ditado ao vivo. Escolha outro provedor em Configurações → Fala para texto.",
+      "commands": "Comandos"
     },
     "tools": {
       "search_notesName": "Pesquisar notas",
@@ -4544,9 +4617,7 @@
     "conversationSelector": "Trocar conversa",
     "history": "Histórico",
     "quickActions": "Ações rápidas",
-    "generateSummary": "Gerar resumo",
-    "makeTodos": "Criar tarefas",
-    "createOutline": "Criar esboço"
+    "generateSummary": "Gerar resumo"
   },
   "transcriptionPreview": {
     "label": "Pré-visualização",
