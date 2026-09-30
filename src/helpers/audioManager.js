@@ -4080,9 +4080,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           clipboardCopied: true,
           transcript: text,
         });
-        return false;
+        return { pasted: false };
       }
-      return result?.pasted === true;
+      return {
+        pasted: result?.pasted === true,
+        ...(result?.reason ? { reason: result.reason } : {}),
+      };
     } catch (error) {
       const message =
         error?.message ??
@@ -4093,7 +4096,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         // Keep the platform's guidance, without Electron's IPC wrapper around it.
         description: message.replace(/^Error invoking remote method '[^']+': (?:\w*Error: )?/, ""),
       });
-      return false;
+      return { pasted: false };
     }
   }
 

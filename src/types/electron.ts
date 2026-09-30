@@ -1158,7 +1158,7 @@ declare global {
           allowClipboardFallback?: boolean;
         }
       ) => Promise<
-        | { success: true; pasted: boolean }
+        | { success: true; pasted: boolean; reason?: "modifiers-held" }
         | {
             success: false;
             pasted: false;
@@ -1199,6 +1199,7 @@ declare global {
           | "selection_unavailable"
           | "selection_changed"
           | "paste_failed"
+          | "modifiers_held"
           | "selection_manager_unavailable";
         error?: string;
       }>;
@@ -1213,6 +1214,7 @@ declare global {
           | "session_expired"
           | "target_changed"
           | "paste_failed"
+          | "modifiers_held"
           | "selection_manager_unavailable";
         error?: string;
       }>;
