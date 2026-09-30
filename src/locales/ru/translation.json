@@ -637,12 +637,14 @@
       "couldNotDeleteTitle": "Не удалось удалить",
       "couldNotDeleteDescription": "Эта транскрипция, возможно, уже была удалена.",
       "couldNotDeleteDescriptionGeneric": "Что-то пошло не так. Попробуйте снова.",
-      "empty": "Транскрипций пока нет",
-      "emptyDescription": "Нажмите горячую клавишу в любом приложении и начните говорить. Каждая транскрипция сохраняется здесь, приватно, на вашем устройстве.",
-      "sectionTitle": "Транскрипции",
+      "empty": "Начните первую диктовку",
+      "emptyDescription": "Здесь появится ваш надиктованный текст.",
+      "shortcutHint": "Нажмите {{shortcut}} и начните говорить.",
       "dataRetentionDisabled": "Хранение данных отключено. Транскрипции и аудио не сохраняются в истории.",
-      "press": "Нажмите",
-      "toStart": "чтобы начать",
+      "welcomeBack": "С возвращением",
+      "welcomeBackNamed": "С возвращением, {{name}}",
+      "welcome": "Добро пожаловать",
+      "welcomeNamed": "Добро пожаловать, {{name}}",
       "dateGroups": {
         "today": "Сегодня",
         "yesterday": "Вчера"
@@ -2837,6 +2839,7 @@
       "undo": "Отменить",
       "emptySpace": "Пока нет заметок. Заметки здесь видны всем в {{space}}.",
       "emptyTeamHint": "Пространства, которыми с вами поделились, появятся здесь.",
+      "emptyTeamTitle": "Нет общих пространств",
       "noteCount_one": "{{count}} заметка",
       "noteCount_few": "{{count}} заметки",
       "noteCount_many": "{{count}} заметок",
@@ -2976,8 +2979,8 @@
       "raw": "Исходный",
       "aiSummary": "ИИ-сводка",
       "saving": "Сохранение",
-      "transcriptEmptyTitle": "Пока ничего не записано",
-      "transcriptEmptyDescription": "Нажмите «Запись», чтобы начать транскрипцию. Всё сказанное появится здесь в реальном времени.",
+      "transcriptEmptyTitle": "Транскрипции пока нет",
+      "transcriptEmptyDescription": "Начните запись, и всё сказанное появится здесь.",
       "startRecording": "Начать запись",
       "generateSummary": "Создать ИИ-сводку",
       "startWriting": "Начните писать...",
@@ -3314,9 +3317,6 @@
         }
       },
       "invite": "Пригласить",
-      "list": {
-        "empty": "Здесь пока нет заметок"
-      },
       "author": {
         "you": "Вы"
       }
@@ -3365,19 +3365,14 @@
       "examples": {
         "linkedinTrigger": "Мой LinkedIn",
         "linkedinText": "linkedin.com/in/you",
-        "rewriteTrigger": "Промпт для переписывания",
-        "rewriteText": "Перепиши это более кратко и профессионально",
-        "introTrigger": "Вступительное письмо",
-        "introText": "Привет, буду рад найти время пообщаться на этой неделе…",
         "signoffTrigger": "Подпись",
         "signoffText": "С уважением, Алекс · alex@example.com"
       },
       "addPlaceholder": "Добавьте фразу-триггер — «мой календарь», «мой LinkedIn»"
     },
-    "emptyTitle": "Ваш словарь пуст",
+    "emptyTitle": "Добавьте слова в словарь",
     "emptyDescription": "Добавьте слова, которые {{agentName}} всегда должен распознавать: имена, инструменты, аббревиатуры.",
     "addFirstWord": "Добавьте первое слово",
-    "importList": "Импортировать список",
     "agentDefault": "Добавлено по умолчанию"
   },
   "insights": {
@@ -3554,8 +3549,10 @@
     "newChat": "Новый чат",
     "search": "Поиск бесед...",
     "archived": "Архив",
-    "noConversations": "Начните свою первую беседу",
-    "selectChat": "Выберите беседу или начните новую",
+    "noConversations": "Чатов пока нет",
+    "allArchived": "Все чаты в архиве",
+    "noConversationsDescription": "Здесь появятся ваши чаты с ассистентом.",
+    "loadFailed": "Не удалось загрузить чаты",
     "noResults": "Совпадений не найдено",
     "today": "Сегодня",
     "yesterday": "Вчера",
@@ -3570,7 +3567,12 @@
     "searchChats": "Поиск чатов",
     "searchTitle": "Поиск бесед",
     "searchDescription": "Поиск по всем беседам",
-    "newChatEmpty": "Спросите о заметках, транскрипциях или о чём угодно"
+    "inputPlaceholder": "Спросите что-нибудь...",
+    "starters": {
+      "todos": "Перечисли мои последние задачи",
+      "meeting": "Подготовь меня к следующей встрече",
+      "sharedNotes": "Выдели мои общие заметки"
+    }
   },
   "support": {
     "documentation": "Документация",
@@ -4380,12 +4382,14 @@
     "tomorrow": "Завтра"
   },
   "upcoming": {
-    "title": "Скоро",
     "now": "Сейчас",
     "untitledEvent": "Без названия",
     "joinAndTranscribe": "Присоединиться и вести заметки",
     "takeNotes": "Вести заметки",
-    "noEventsToday": "Сегодня событий нет",
+    "noEventsToday": "На сегодня встреч больше нет",
+    "emptyDayDescription": "Самое время потрогать траву",
+    "touchGrass": "Потрогать траву",
+    "touchGrassLabel": "Лужайка. Проведите по ней указателем или клавишами со стрелками. Нажмите Escape, чтобы вернуться.",
     "noUpcomingEvents": "Нет предстоящих событий",
     "moreCalendarsHint": "Нужны другие календари?",
     "connectHere": "Подключите их здесь",
@@ -4567,15 +4571,19 @@
     }
   },
   "embeddedChat": {
-    "askPlaceholder": "Спросите что-нибудь...",
-    "send": "Отправить",
+    "askPlaceholder": "Спросите о своей заметке",
     "title": "Чат",
     "emptyState": "Задайте вопрос об этой заметке",
     "dock": "Закрепить на боковой панели",
     "undock": "Открепить от боковой панели",
     "close": "Закрыть чат",
     "newChat": "Новый чат",
-    "conversationSelector": "Сменить беседу"
+    "conversationSelector": "Сменить беседу",
+    "history": "История",
+    "quickActions": "Быстрые действия",
+    "generateSummary": "Создать сводку",
+    "makeTodos": "Составить список дел",
+    "createOutline": "Создать план"
   },
   "transcriptionPreview": {
     "label": "Предпросмотр",

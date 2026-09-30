@@ -637,12 +637,14 @@
       "couldNotDeleteTitle": "Löschen fehlgeschlagen",
       "couldNotDeleteDescription": "Diese Transkription wurde möglicherweise bereits entfernt.",
       "couldNotDeleteDescriptionGeneric": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
-      "empty": "Noch keine Transkriptionen",
-      "emptyDescription": "Drücke deinen Hotkey in einer beliebigen App und sprich los. Jede Transkription wird hier privat auf deinem Gerät gespeichert.",
-      "sectionTitle": "Transkriptionen",
+      "empty": "Starte dein erstes Diktat",
+      "emptyDescription": "Dein diktierter Text erscheint hier.",
+      "shortcutHint": "Drücke {{shortcut}} und sprich los.",
       "dataRetentionDisabled": "Datenaufbewahrung ist deaktiviert. Transkriptionen und Audio werden nicht im Verlauf gespeichert.",
-      "press": "Drücken Sie",
-      "toStart": "zum Starten",
+      "welcomeBack": "Willkommen zurück",
+      "welcomeBackNamed": "Willkommen zurück, {{name}}",
+      "welcome": "Willkommen",
+      "welcomeNamed": "Willkommen, {{name}}",
       "dateGroups": {
         "today": "Heute",
         "yesterday": "Gestern"
@@ -1184,12 +1186,14 @@
     "tomorrow": "Morgen"
   },
   "upcoming": {
-    "title": "Demnächst",
     "now": "Jetzt",
     "untitledEvent": "Unbenanntes Ereignis",
     "joinAndTranscribe": "Beitreten & transkribieren",
     "takeNotes": "Notizen machen",
-    "noEventsToday": "Heute keine Termine",
+    "noEventsToday": "Heute keine Meetings mehr",
+    "emptyDayDescription": "Zeit, ein bisschen Gras anzufassen",
+    "touchGrass": "Gras anfassen",
+    "touchGrassLabel": "Ein Stück Rasen. Streich mit dem Mauszeiger oder den Pfeiltasten darüber. Mit Escape geht es zurück.",
     "noUpcomingEvents": "Keine anstehenden Termine",
     "moreCalendarsHint": "Weitere Kalender gewünscht?",
     "connectHere": "Hier verbinden",
@@ -2810,7 +2814,7 @@
     "enableDescription_one": "Nutzung aus {{count}} vorhandenem Diktat synchronisieren. Transkripte bleiben privat.",
     "enableDescription_other": "Nutzung aus {{count}} vorhandenen Diktaten synchronisieren. Transkripte bleiben privat.",
     "emptyTitle": "Noch keine Diktate",
-    "emptyBody": "Beginnen Sie zu diktieren – Ihre Wörter, Serien und tägliche Aktivität erscheinen dann hier.",
+    "emptyBody": "Fang an zu diktieren – deine Wörter, Serien und tägliche Aktivität erscheinen dann hier.",
     "loadError": "Insights konnten von diesem Gerät nicht gelesen werden.",
     "leaderboard": {
       "title": "Bestenliste",
@@ -3003,8 +3007,10 @@
     "newChat": "Neuer Chat",
     "search": "Unterhaltungen suchen...",
     "archived": "Archiviert",
-    "noConversations": "Starten Sie Ihre erste Unterhaltung",
-    "selectChat": "Wählen Sie eine Unterhaltung oder starten Sie eine neue",
+    "noConversations": "Noch keine Chats",
+    "allArchived": "Alle Chats sind archiviert",
+    "noConversationsDescription": "Deine Chats mit dem Assistenten erscheinen hier.",
+    "loadFailed": "Chats konnten nicht geladen werden",
     "noResults": "Keine passenden Unterhaltungen",
     "today": "Heute",
     "yesterday": "Gestern",
@@ -3019,7 +3025,12 @@
     "searchChats": "Chats suchen",
     "searchTitle": "Unterhaltungen suchen",
     "searchDescription": "In allen Unterhaltungen suchen",
-    "newChatEmpty": "Fragen Sie zu Ihren Notizen, Transkripten oder anderem"
+    "inputPlaceholder": "Frag etwas...",
+    "starters": {
+      "todos": "Liste meine letzten Aufgaben auf",
+      "meeting": "Bereite mich auf mein nächstes Meeting vor",
+      "sharedNotes": "Hebe meine geteilten Notizen hervor"
+    }
   },
   "referral": {
     "title": "Empfehlen und Belohnungen erhalten",
@@ -3164,6 +3175,7 @@
       "undo": "Rückgängig",
       "emptySpace": "Noch keine Notizen. Notizen hier sind für alle in {{space}} sichtbar.",
       "emptyTeamHint": "Mit Ihnen geteilte Bereiche erscheinen hier.",
+      "emptyTeamTitle": "Keine geteilten Bereiche",
       "noteCount_one": "{{count}} Notiz",
       "noteCount_other": "{{count}} Notizen",
       "accessRevoked": "Du hast keinen Zugriff mehr auf {{space}}",
@@ -3299,8 +3311,8 @@
       "raw": "Roh",
       "aiSummary": "KI-Zusammenfassung",
       "saving": "Wird gespeichert",
-      "transcriptEmptyTitle": "Noch nichts aufgenommen",
-      "transcriptEmptyDescription": "Drücke auf Aufnahme, um mit der Transkription zu beginnen. Alles Gesagte erscheint hier in Echtzeit.",
+      "transcriptEmptyTitle": "Noch kein Transkript",
+      "transcriptEmptyDescription": "Starte eine Aufnahme, und alles Gesagte erscheint hier.",
       "startRecording": "Aufnahme starten",
       "generateSummary": "KI-Zusammenfassung erstellen",
       "startWriting": "Schreibe los...",
@@ -3633,9 +3645,6 @@
         }
       },
       "invite": "Einladen",
-      "list": {
-        "empty": "Hier gibt es noch keine Notizen"
-      },
       "author": {
         "you": "Du"
       }
@@ -3682,19 +3691,14 @@
       "examples": {
         "linkedinTrigger": "Mein LinkedIn",
         "linkedinText": "linkedin.com/in/du",
-        "rewriteTrigger": "Umschreib-Prompt",
-        "rewriteText": "Schreibe das prägnanter und professioneller um",
-        "introTrigger": "Intro-E-Mail",
-        "introText": "Hallo, ich würde mich freuen, diese Woche Zeit für ein Gespräch zu finden …",
         "signoffTrigger": "Grußformel",
         "signoffText": "Viele Grüße, Alex · alex@example.com"
       },
       "addPlaceholder": "Auslöser-Phrase hinzufügen – „mein Kalender“, „mein LinkedIn“"
     },
-    "emptyTitle": "Dein Wörterbuch ist leer",
+    "emptyTitle": "Füge Wörter zu deinem Wörterbuch hinzu",
     "emptyDescription": "Füge Wörter hinzu, die {{agentName}} immer richtig erkennen soll: Namen, Tools, Abkürzungen.",
     "addFirstWord": "Füge dein erstes Wort hinzu",
-    "importList": "Liste importieren",
     "agentDefault": "Standardmäßig enthalten"
   },
   "support": {
@@ -4599,15 +4603,19 @@
     "continue": "Weiter"
   },
   "embeddedChat": {
-    "askPlaceholder": "Frag etwas...",
-    "send": "Senden",
+    "askPlaceholder": "Frag etwas zu deiner Notiz",
     "title": "Chat",
     "emptyState": "Stelle eine Frage zu dieser Notiz",
     "dock": "In Seitenleiste andocken",
     "undock": "Von Seitenleiste abdocken",
     "close": "Chat schließen",
     "newChat": "Neuer Chat",
-    "conversationSelector": "Unterhaltung wechseln"
+    "conversationSelector": "Unterhaltung wechseln",
+    "history": "Verlauf",
+    "quickActions": "Schnellaktionen",
+    "generateSummary": "Zusammenfassung erstellen",
+    "makeTodos": "Aufgabenliste erstellen",
+    "createOutline": "Gliederung erstellen"
   },
   "transcriptionPreview": {
     "label": "Vorschau",

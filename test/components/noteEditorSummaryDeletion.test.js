@@ -191,18 +191,18 @@ async function loadNoteEditor(t) {
   const NoteEditor = mod.default;
 
   const renders = [];
-  function Harness({ enhancement, note }) {
+  function Harness({ enhancement, overrides }) {
     // Run the real component body + hooks under React's lifecycle without
     // mounting host elements (the harness DOM has no layout), then assert on
     // the tree it returned.
-    renders.push(NoteEditor({ ...baseProps(enhancement), ...(note ? { note } : {}) }));
+    renders.push(NoteEditor({ ...baseProps(enhancement), ...overrides }));
     return null;
   }
 
   const root = createRoot(container);
-  const render = (enhancement, note) =>
+  const render = (enhancement, overrides) =>
     React.act(async () => {
-      root.render(React.createElement(Harness, { enhancement, note }));
+      root.render(React.createElement(Harness, { enhancement, overrides }));
     });
   const click = (value) =>
     React.act(async () => {
@@ -295,6 +295,40 @@ test("hides the highlight instead of freezing it when no tab matches the selecti
   await unmount();
 });
 
+test("the summary callout makes way for the transcript selection bar", async (t) => {
+  const { render, click, latest, unmount } = await loadNoteEditor(t);
+  const propsWith = (key) => {
+    let found = null;
+    walk(latest(), (node) => {
+      if (!found && key in node.props) found = node.props;
+    });
+    return found;
+  };
+
+  await render(undefined, {
+    note: {
+      ...NOTE,
+      enhanced_content: null,
+      transcript: JSON.stringify([{ text: "Hello", source: "mic", timestamp: 0 }]),
+    },
+    onGenerateSummary() {},
+  });
+  findSegmentStrip(latest()).props.ref.current = measurableStrip(["transcript", "raw"]);
+  await click("transcript");
+  assert.ok(propsWith("onAskSubmit").callout, "a transcript without a summary offers one");
+
+  const transcript = propsWith("onToggleSelect");
+  await React.act(async () => transcript.onToggleSelect(transcript.segments[0].id));
+  assert.ok(propsWith("onAssignName"), "selecting a segment shows the selection bar");
+  // Both float in the same bottom strip; the callout would cover the bar's buttons.
+  assert.ok(
+    !propsWith("onAskSubmit").callout,
+    "the callout steps aside while segments are selected"
+  );
+
+  await unmount();
+});
+
 test("the note's chat gets the note's participants, parsed once", async (t) => {
   t.after(() => {
     delete globalThis.__embeddedChatOptions;
@@ -324,19 +358,55 @@ test("the note's chat learns who is viewing the note and its calendar event", as
   const options = () => globalThis.__embeddedChatOptions;
 
   // A local note is the user's own.
-  await render(ENHANCEMENT, { ...NOTE, calendar_event_id: "evt-1" });
+  await render(ENHANCEMENT, { note: { ...NOTE, calendar_event_id: "evt-1" } });
   assert.equal(options().noteOwnedByUser, true);
   assert.equal(options().selfEmail, "chad@example.com");
   assert.equal(options().noteCalendarEventId, "evt-1");
 
   // A team note someone else recorded is not.
   await render(ENHANCEMENT, {
-    ...NOTE,
-    cloud_id: "cloud-1",
-    owner_user_id: "user-alice",
-    calendar_event_id: null,
+    note: {
+      ...NOTE,
+      cloud_id: "cloud-1",
+      owner_user_id: "user-alice",
+      calendar_event_id: null,
+    },
   });
   assert.equal(options().noteOwnedByUser, false);
   assert.equal(options().noteCalendarEventId, null);
+  await unmount();
+});
+
+// The note's bottom bar: the element that receives the in-view chat as `chatContent`.
+function findBottomBar(tree) {
+  let bar = null;
+  walk(tree, (node) => {
+    if (!bar && "chatContent" in node.props) bar = node;
+  });
+  return bar;
+}
+
+test("the in-view chat mounts on its first open and stays to fade out", async (t) => {
+  const { render, latest, unmount } = await loadNoteEditor(t);
+  // Closing checks whether focus is inside the chat; the harness DOM has no elements.
+  const originalHTMLElement = globalThis.HTMLElement;
+  globalThis.HTMLElement ??= class {};
+  t.after(() => {
+    if (originalHTMLElement === undefined) delete globalThis.HTMLElement;
+    else globalThis.HTMLElement = originalHTMLElement;
+  });
+
+  // Every keystroke in the note re-renders the editor; a chat nobody opened isn't
+  // rendered, so its conversation isn't parsed on each one.
+  await render(ENHANCEMENT);
+  assert.ok(!findBottomBar(latest()).props.chatContent);
+
+  await React.act(async () => findBottomBar(latest()).props.onInputFocus());
+  assert.equal(findBottomBar(latest()).props.chatOpen, true);
+  assert.ok(findBottomBar(latest()).props.chatContent);
+
+  await React.act(async () => findBottomBar(latest()).props.onInputEscape());
+  assert.equal(findBottomBar(latest()).props.chatOpen, false);
+  assert.ok(findBottomBar(latest()).props.chatContent, "closing keeps it mounted for the fade");
   await unmount();
 });

@@ -646,12 +646,14 @@
       "couldNotDeleteTitle": "No se pudo eliminar",
       "couldNotDeleteDescription": "Puede que esta transcripción ya se haya eliminado.",
       "couldNotDeleteDescriptionGeneric": "Algo salió mal. Inténtalo de nuevo.",
-      "empty": "Aún no hay transcripciones",
-      "emptyDescription": "Pulsa tu atajo en cualquier app y empieza a hablar. Cada transcripción se guarda aquí de forma privada en tu dispositivo.",
-      "sectionTitle": "Transcripciones",
+      "empty": "Empieza tu primer dictado",
+      "emptyDescription": "Tu texto dictado aparecerá aquí.",
+      "shortcutHint": "Pulsa {{shortcut}} y empieza a hablar.",
       "dataRetentionDisabled": "La retención de datos está desactivada. Las transcripciones y el audio no se guardan en el historial.",
-      "press": "Pulsa",
-      "toStart": "para empezar",
+      "welcomeBack": "Bienvenido de nuevo",
+      "welcomeBackNamed": "Bienvenido de nuevo, {{name}}",
+      "welcome": "Bienvenido",
+      "welcomeNamed": "Bienvenido, {{name}}",
       "dateGroups": {
         "today": "Hoy",
         "yesterday": "Ayer"
@@ -2874,6 +2876,7 @@
       "undo": "Deshacer",
       "emptySpace": "Aún no hay notas. Las notas aquí son visibles para todos en {{space}}.",
       "emptyTeamHint": "Los espacios compartidos contigo aparecerán aquí.",
+      "emptyTeamTitle": "No hay espacios compartidos",
       "noteCount_one": "{{count}} nota",
       "noteCount_other": "{{count}} notas",
       "accessRevoked": "Ya no tienes acceso a {{space}}",
@@ -3009,8 +3012,8 @@
       "raw": "Sin procesar",
       "aiSummary": "Resumen con IA",
       "saving": "Guardando",
-      "transcriptEmptyTitle": "Aún no hay grabaciones",
-      "transcriptEmptyDescription": "Pulsa grabar para empezar a transcribir. Todo lo que se diga aparecerá aquí en tiempo real.",
+      "transcriptEmptyTitle": "Aún no hay transcripción",
+      "transcriptEmptyDescription": "Inicia una grabación y todo lo que se diga aparecerá aquí.",
       "startRecording": "Empezar a grabar",
       "generateSummary": "Generar resumen con IA",
       "startWriting": "Comienza a escribir...",
@@ -3343,9 +3346,6 @@
         }
       },
       "invite": "Invitar",
-      "list": {
-        "empty": "Aún no hay notas aquí"
-      },
       "author": {
         "you": "Tú"
       }
@@ -3392,19 +3392,14 @@
       "examples": {
         "linkedinTrigger": "Mi LinkedIn",
         "linkedinText": "linkedin.com/in/tu",
-        "rewriteTrigger": "Prompt de reescritura",
-        "rewriteText": "Reescribe esto para que sea más conciso y profesional",
-        "introTrigger": "Email de presentación",
-        "introText": "Hola, me encantaría encontrar un momento para hablar esta semana…",
         "signoffTrigger": "Despedida",
         "signoffText": "Saludos, Alex · alex@example.com"
       },
       "addPlaceholder": "Añade una frase disparadora: \"mi agenda\", \"mi LinkedIn\""
     },
-    "emptyTitle": "Tu diccionario está vacío",
+    "emptyTitle": "Añade palabras a tu diccionario",
     "emptyDescription": "Añade palabras que {{agentName}} siempre debe reconocer: nombres, herramientas, siglas.",
     "addFirstWord": "Añade tu primera palabra",
-    "importList": "Importar una lista",
     "agentDefault": "Añadido por defecto"
   },
   "insights": {
@@ -3563,8 +3558,10 @@
     "newChat": "Nuevo chat",
     "search": "Buscar conversaciones...",
     "archived": "Archivadas",
-    "noConversations": "Inicia tu primera conversación",
-    "selectChat": "Selecciona una conversación o inicia una nueva",
+    "noConversations": "Aún no hay chats",
+    "allArchived": "Todos los chats están archivados",
+    "noConversationsDescription": "Tus chats con el Asistente aparecerán aquí.",
+    "loadFailed": "No se pudieron cargar los chats",
     "noResults": "Sin conversaciones coincidentes",
     "today": "Hoy",
     "yesterday": "Ayer",
@@ -3579,7 +3576,12 @@
     "searchChats": "Buscar chats",
     "searchTitle": "Buscar conversaciones",
     "searchDescription": "Buscar en todas tus conversaciones",
-    "newChatEmpty": "Pregunta sobre tus notas, transcripciones o lo que quieras"
+    "inputPlaceholder": "Pregunta algo...",
+    "starters": {
+      "todos": "Enumera mis tareas recientes",
+      "meeting": "Prepárame para mi próxima reunión",
+      "sharedNotes": "Destaca mis notas compartidas"
+    }
   },
   "support": {
     "documentation": "Documentación",
@@ -4389,12 +4391,14 @@
     "tomorrow": "Mañana"
   },
   "upcoming": {
-    "title": "Próximamente",
     "now": "Ahora",
     "untitledEvent": "Evento sin título",
     "joinAndTranscribe": "Unirse y transcribir",
     "takeNotes": "Tomar notas",
-    "noEventsToday": "Hoy no hay eventos",
+    "noEventsToday": "Hoy no hay más reuniones",
+    "emptyDayDescription": "Es hora de tocar un poco de césped",
+    "touchGrass": "Tocar césped",
+    "touchGrassLabel": "Un trozo de césped. Acarícialo con el puntero o con las teclas de flecha. Pulsa Escape para volver.",
     "noUpcomingEvents": "No hay próximos eventos",
     "moreCalendarsHint": "¿Quieres añadir más calendarios?",
     "connectHere": "Conéctalos aquí",
@@ -4523,15 +4527,19 @@
     "continue": "Continuar"
   },
   "embeddedChat": {
-    "askPlaceholder": "Pregunta algo...",
-    "send": "Enviar",
+    "askPlaceholder": "Pregunta sobre tu nota",
     "title": "Chat",
     "emptyState": "Haz una pregunta sobre esta nota",
     "dock": "Anclar a la barra lateral",
     "undock": "Desanclar de la barra lateral",
     "close": "Cerrar chat",
     "newChat": "Nuevo chat",
-    "conversationSelector": "Cambiar conversación"
+    "conversationSelector": "Cambiar conversación",
+    "history": "Historial",
+    "quickActions": "Acciones rápidas",
+    "generateSummary": "Generar resumen",
+    "makeTodos": "Crear tareas",
+    "createOutline": "Crear esquema"
   },
   "transcriptionPreview": {
     "label": "Vista previa",

@@ -637,12 +637,14 @@
       "couldNotDeleteTitle": "削除できませんでした",
       "couldNotDeleteDescription": "この文字起こしは既に削除されている可能性があります。",
       "couldNotDeleteDescriptionGeneric": "問題が発生しました。もう一度お試しください。",
-      "empty": "文字起こし履歴はまだありません",
-      "emptyDescription": "どのアプリでもホットキーを押して話し始めてください。すべての文字起こしは、このデバイス上にプライベートに保存されます。",
-      "sectionTitle": "文字起こし",
+      "empty": "最初のディクテーションを始めましょう",
+      "emptyDescription": "ディクテーションしたテキストがここに表示されます。",
+      "shortcutHint": "{{shortcut}} を押して話し始めてください。",
       "dataRetentionDisabled": "データ保持が無効です。文字起こしと音声は履歴に保存されません。",
-      "press": "押してください",
-      "toStart": "開始するには",
+      "welcomeBack": "おかえりなさい",
+      "welcomeBackNamed": "おかえりなさい、{{name}}さん",
+      "welcome": "ようこそ",
+      "welcomeNamed": "ようこそ、{{name}}さん",
       "dateGroups": {
         "today": "今日",
         "yesterday": "昨日"
@@ -2749,6 +2751,7 @@
       "undo": "元に戻す",
       "emptySpace": "まだノートがありません。ここのノートは{{space}}の全員に表示されます。",
       "emptyTeamHint": "共有されたスペースはここに表示されます。",
+      "emptyTeamTitle": "共有スペースはありません",
       "noteCount_one": "{{count}} 件のノート",
       "noteCount_other": "{{count}} 件のノート",
       "accessRevoked": "{{space}} へのアクセス権がなくなりました",
@@ -2858,8 +2861,8 @@
       "raw": "元のテキスト",
       "aiSummary": "AI要約",
       "saving": "保存中",
-      "transcriptEmptyTitle": "まだ録音がありません",
-      "transcriptEmptyDescription": "録音ボタンを押すと文字起こしが始まります。話した内容がここにリアルタイムで表示されます。",
+      "transcriptEmptyTitle": "文字起こしはまだありません",
+      "transcriptEmptyDescription": "録音を始めると、話した内容がここに表示されます。",
       "startRecording": "録音を開始",
       "generateSummary": "AI要約を生成",
       "startWriting": "書き始める...",
@@ -3218,9 +3221,6 @@
         }
       },
       "invite": "招待",
-      "list": {
-        "empty": "まだノートがありません"
-      },
       "author": {
         "you": "自分"
       }
@@ -3267,19 +3267,14 @@
       "examples": {
         "linkedinTrigger": "私のLinkedIn",
         "linkedinText": "linkedin.com/in/you",
-        "rewriteTrigger": "書き直しプロンプト",
-        "rewriteText": "これをより簡潔でプロフェッショナルに書き直して",
-        "introTrigger": "挨拶メール",
-        "introText": "こんにちは、今週どこかでお話しできれば嬉しいです…",
         "signoffTrigger": "署名",
         "signoffText": "よろしくお願いします。Alex · alex@example.com"
       },
       "addPlaceholder": "トリガーフレーズを追加 — 「カレンダーリンク」「署名」など"
     },
-    "emptyTitle": "辞書は空です",
+    "emptyTitle": "辞書に単語を追加しましょう",
     "emptyDescription": "{{agentName}}に正しく認識してほしい言葉を追加しましょう。名前、ツール、略語など。",
     "addFirstWord": "最初の単語を追加",
-    "importList": "リストをインポート",
     "agentDefault": "デフォルトで追加済み"
   },
   "referral": {
@@ -3510,8 +3505,10 @@
     "newChat": "新しいチャット",
     "search": "会話を検索...",
     "archived": "アーカイブ済み",
-    "noConversations": "最初の会話を始めましょう",
-    "selectChat": "会話を選択するか、新しく始めてください",
+    "noConversations": "チャットはまだありません",
+    "allArchived": "すべてのチャットはアーカイブ済みです",
+    "noConversationsDescription": "アシスタントとのチャットはここに表示されます。",
+    "loadFailed": "チャットを読み込めませんでした",
     "noResults": "該当する会話がありません",
     "today": "今日",
     "yesterday": "昨日",
@@ -3526,7 +3523,12 @@
     "searchChats": "チャットを検索",
     "searchTitle": "会話を検索",
     "searchDescription": "すべての会話を検索",
-    "newChatEmpty": "ノートや文字起こし、その他なんでも聞いてください"
+    "inputPlaceholder": "何でも聞いてください...",
+    "starters": {
+      "todos": "最近のTo Doを一覧にして",
+      "meeting": "次の会議に備えさせて",
+      "sharedNotes": "共有ノートのハイライトを見せて"
+    }
   },
   "support": {
     "documentation": "ドキュメント",
@@ -4336,12 +4338,14 @@
     "tomorrow": "明日"
   },
   "upcoming": {
-    "title": "今後の予定",
     "now": "進行中",
     "untitledEvent": "無題のイベント",
     "joinAndTranscribe": "参加して文字起こし",
     "takeNotes": "メモを取る",
-    "noEventsToday": "今日の予定はありません",
+    "noEventsToday": "今日の会議はもうありません",
+    "emptyDayDescription": "そろそろ芝生に触れる時間です",
+    "touchGrass": "芝生に触れる",
+    "touchGrassLabel": "芝生です。ポインターか矢印キーでなでてみてください。Esc キーで戻ります。",
     "noUpcomingEvents": "今後の予定はありません",
     "moreCalendarsHint": "他のカレンダーも連携しますか？",
     "connectHere": "ここから連携",
@@ -4523,15 +4527,19 @@
     }
   },
   "embeddedChat": {
-    "askPlaceholder": "何でも聞いてください...",
-    "send": "送信",
+    "askPlaceholder": "ノートについて何でも質問",
     "title": "チャット",
     "emptyState": "このノートについて質問してください",
     "dock": "サイドバーに固定",
     "undock": "サイドバーから外す",
     "close": "チャットを閉じる",
     "newChat": "新しいチャット",
-    "conversationSelector": "会話を切り替え"
+    "conversationSelector": "会話を切り替え",
+    "history": "履歴",
+    "quickActions": "クイックアクション",
+    "generateSummary": "要約を作成",
+    "makeTodos": "ToDoを作成",
+    "createOutline": "アウトラインを作成"
   },
   "transcriptionPreview": {
     "label": "プレビュー",
