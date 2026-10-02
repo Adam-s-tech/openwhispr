@@ -1342,6 +1342,22 @@ class IPCHandlers {
       this.windowManager.setOnboardingWindowMode(mode)
     );
 
+    ipcMain.handle("permission-guide-open", (event, state) =>
+      this.windowManager.permissionGuide.open(event, state)
+    );
+    ipcMain.handle("permission-guide-close", (event) =>
+      this.windowManager.permissionGuide.closeFromOwner(event)
+    );
+    ipcMain.handle("permission-guide-state", (event) =>
+      this.windowManager.permissionGuide.stateFor(event)
+    );
+    ipcMain.on("permission-guide-action", (event, action) =>
+      this.windowManager.permissionGuide.handleAction(event, action)
+    );
+    ipcMain.on("permission-guide-drag", (event, target) =>
+      this.windowManager.permissionGuide.startDrag(event, target)
+    );
+
     // WindowManager owns every teardown path for a demo (id-matched end,
     // onboarding-set-active(false), control panel closed); without this hook a
     // renderer crash mid-demo would leave the session set and broadcast every
@@ -5933,6 +5949,12 @@ class IPCHandlers {
     };
 
     ipcMain.handle("check-system-audio-access", () => getSystemAudioAccess());
+
+    ipcMain.handle("permission-guide-verify-system-audio", async () => {
+      if (!this.audioTapManager?.isSupported()) return buildSystemAudioAccess();
+      const result = await this.audioTapManager.requestAccess();
+      return buildSystemAudioAccess({ ...result, mode: "native", strategy: "native" });
+    });
 
     ipcMain.handle("request-system-audio-access", async () => {
       if (process.platform === "win32") {

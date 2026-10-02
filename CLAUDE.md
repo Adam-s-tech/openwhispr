@@ -53,6 +53,7 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
 - **windows-system-audio-helper.c**: C source for WASAPI process-loopback system audio capture (meeting transcription). Excludes OpenWhispr's own process tree, so it hears every app on every output device. Requires Windows 10 2004+; falls back to Chromium display-media loopback when unavailable. Mid-session, the helper emits a `capture_silent` warning when its own stream is silent while a render endpoint is metering output, checked every second for the whole session because Windows keeps some apps' streams out of process loopback (Teams call audio, #1265). Main then starts renderer loopback beside the helper, and `meetingSystemAudioHandover.js` gives loopback the system channel only after it hears audio the helper misses, so a false alarm never drops a working capture. Outputs 24 kHz mono s16le PCM on stdout, line-delimited JSON events on stderr (same protocol as linux-system-audio-helper)
 - **macos-mic-listener.swift**: Swift source for the CoreAudio process-object microphone listener (event-driven mic detection); falls back to aggregate device activity and retries PID monitoring from its heartbeat
 - **globe-listener.swift**: Swift source for macOS Globe/Fn key detection
+- **macos-window-bounds.swift**: Swift source for the System Settings window reporter used by the onboarding permission guide. Prints the dialog's bounds, whether a sheet or authorization prompt is in front, which app owns the front window (`settings` / `self` / `other`, attributed by process because window owner names are localized) and whether System Settings is running. CoreGraphics window list only, so it needs neither Accessibility nor Screen Recording
 - **bin/**: Directory for compiled native binaries (whisper-cpp, nircmd, key/mic listeners)
 
 ### Helper Modules (src/helpers/)
@@ -186,6 +187,7 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
   - Token handling shared by the OAuth connectors (`boundLogin.js`): reads, the reconnect flag, saving a refreshed token and one refresh at a time, only ever for the login an action is bound to. Gmail's and Linear's clients share one timed POST and its body helpers (`providerHttp.js`); GitHub's uses the body helpers
   - Logins: one encrypted file per OpenWhispr account and connector under `userData/connectors/` (atomic writes, `0o700`, `connectorCredentials.js`). Every write names the account and the generation it started from, so an OAuth round trip, refresh or disconnect that outlives a reconnect or account switch writes nothing. Bindings carry `ownerAccountId`; receipts carry `account_id`. Signed out → every connector action is refused (`signed_out`). Pending actions also expire in main (`sweepExpired`, every minute)
 - **postMigrationDetector.js**: Detects users returning from the pre-Gizmo bundle ID via a `.bundle-migrated` sentinel in userData; consumed by `ipcHandlers.js` to drive the `PostMigrationOnboarding` modal
+- **permissionGuideManager.js**: macOS onboarding permission overlay — a frameless always-on-top window anchored to the bottom of the System Settings window (placement in `permissionGuidePlacement.js`, pure), polled one read at a time via `settingsWindowState.js` (exec of `macos-window-bounds`). Steps aside for authorization prompts, other apps and a dialog on another Space; closes when the dialog closes; never subscribes to the control panel's `hide` (occlusion fires it), so `hideControlPanelToTray()` closes it explicitly. Renderer side: `permissionGuideController.ts` (pure state machine, unit-tested) + `usePermissionGuide.ts`
 - **templatePrompts.js**: Pure compiler from a note template or action to the system prompt the model receives (see Note Templates and Actions). Shared by `actionProcessingStore.ts`, the note chat, and the live canary's note probe
 
 ### React Components (src/components/)
@@ -311,6 +313,7 @@ Offline semantic search that finds notes by meaning, not just keywords. Used by 
 - **sync-nucleo-icons.js**: Regenerates `src/components/icons/` from `nucleo-map.json` using the local Nucleo install (`~/.nucleo/skills`); only the icons the app uses are vendored
 - **build-globe-listener.js**: Compiles macOS Globe key listener from Swift source
 - **build-macos-mic-listener.js**: Compiles macOS mic listener from Swift source
+- **build-macos-window-bounds.js**: Compiles the System Settings window reporter from Swift source
 - **build-windows-key-listener.js**: Compiles Windows key listener (for local development)
 - **run-electron.js**: Development script to launch Electron with proper environment
 - **lib/download-utils.js**: Shared utilities for downloading and extracting files
