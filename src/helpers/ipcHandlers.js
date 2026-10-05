@@ -7742,6 +7742,9 @@ class IPCHandlers {
 
     const startMeetingAec = async (systemAudioMode) => {
       meetingAecEnabled = false;
+      if (meetingConnectionOptions.aecEnabled !== true) {
+        return false;
+      }
       if (systemAudioMode === "unsupported" || !this.meetingAecManager?.isAvailable()) {
         return false;
       }
