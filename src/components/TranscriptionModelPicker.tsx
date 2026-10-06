@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -48,7 +48,11 @@ import { GetApiKeyLink } from "./ui/GetApiKeyLink";
 import { getCachedPlatform } from "../utils/platform";
 import { pickWhisperGpuBackend } from "../utils/whisperGpuPack";
 import logger from "../utils/logger";
-import type { ParakeetCheckResult } from "../types/electron";
+import type {
+  CudaWhisperStatus,
+  ParakeetCheckResult,
+  VulkanWhisperStatus,
+} from "../types/electron";
 
 interface LocalModel {
   model: string;
@@ -383,6 +387,7 @@ interface GpuWarningRowProps {
   actionLabel: string;
   onAction: () => void;
   onRemove: () => void;
+  children?: ReactNode;
 }
 
 function GpuWarningRow({
@@ -391,6 +396,7 @@ function GpuWarningRow({
   actionLabel,
   onAction,
   onRemove,
+  children,
 }: GpuWarningRowProps) {
   const { t } = useTranslation();
   return (
@@ -400,6 +406,7 @@ function GpuWarningRow({
         <div className="min-w-0">
           <p className="text-xs font-medium text-foreground">{title}</p>
           <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
+          {children}
           <Button onClick={onAction} size="sm" className="mt-2 h-7 px-3 text-xs">
             {actionLabel}
           </Button>
@@ -488,6 +495,8 @@ export default function TranscriptionModelPicker({
   const [gpuDismissed, setGpuDismissed] = useState(false);
   // The pack fell back to CPU on this machine (persisted by main until retried)
   const [gpuFailed, setGpuFailed] = useState(false);
+  // The whisper-server error line main saved with that failure (#1736)
+  const [gpuFailReason, setGpuFailReason] = useState<string | null>(null);
   // An older release installed the pack and this version can't use it (#2424)
   const [gpuNeedsUpdate, setGpuNeedsUpdate] = useState(false);
   // Why the last pack download failed (cleared by the next attempt)
@@ -770,6 +779,7 @@ export default function TranscriptionModelPicker({
         setGpuBackend(backend);
         setGpuDownloaded(!!status?.downloaded);
         setGpuFailed(!!status?.gpuFailed);
+        setGpuFailReason(status?.gpuFailReason ?? null);
         setGpuNeedsUpdate(!!status?.needsUpdate);
         // A download this card started before Settings was closed is still running
         if (status?.downloading) {
@@ -838,13 +848,26 @@ export default function TranscriptionModelPicker({
 
   // Main falls back to CPU (and remembers it) when a GPU server crashes
   useEffect(() => {
-    const onFallback = () => {
-      setGpuFailed(true);
-      setGpuActivating(false);
-      setGpuActive(false);
-    };
-    const disposeCuda = window.electronAPI?.onCudaFallbackNotification?.(onFallback);
-    const disposeVulkan = window.electronAPI?.onGpuFallbackNotification?.(onFallback);
+    // Main saves the reason before it notifies. Read it from the backend that
+    // failed, not the installed-pack preference above: with both packs
+    // installed, the card can show CUDA while the server ran Vulkan (#1736).
+    const onFallback =
+      (readStatus: () => Promise<CudaWhisperStatus | VulkanWhisperStatus>) => () => {
+        setGpuFailed(true);
+        // Never show the previous failure's reason while the new one loads
+        setGpuFailReason(null);
+        setGpuActivating(false);
+        setGpuActive(false);
+        readStatus()
+          .then((status) => setGpuFailReason(status.gpuFailReason ?? null))
+          .catch(() => {});
+      };
+    const disposeCuda = window.electronAPI?.onCudaFallbackNotification?.(
+      onFallback(window.electronAPI.getCudaWhisperStatus)
+    );
+    const disposeVulkan = window.electronAPI?.onGpuFallbackNotification?.(
+      onFallback(window.electronAPI.getVulkanWhisperStatus)
+    );
     return () => {
       disposeCuda?.();
       disposeVulkan?.();
@@ -1439,7 +1462,16 @@ export default function TranscriptionModelPicker({
                       actionLabel={t("gpu.retryActivation")}
                       onAction={handleGpuRetry}
                       onRemove={handleGpuDelete}
-                    />
+                    >
+                      {gpuFailReason && (
+                        <p
+                          dir="ltr"
+                          className="mt-1 wrap-break-word font-mono text-[11px] leading-snug text-muted-foreground"
+                        >
+                          {gpuFailReason}
+                        </p>
+                      )}
+                    </GpuWarningRow>
                   ) : (
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
