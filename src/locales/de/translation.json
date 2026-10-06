@@ -3835,6 +3835,10 @@
     "activationFailedDescription": "OpenWhispr verwendet die CPU-Transkription.",
     "reasoningActivationFailedDescription": "OpenWhispr verwendet die CPU-Verarbeitung.",
     "retryActivation": "GPU-Beschleunigung erneut versuchen",
+    "redownloadNeeded": "GPU-Paket muss erneut heruntergeladen werden",
+    "redownloadNeededDescription": "Diese Version von OpenWhispr kann dein installiertes GPU-Paket nicht verwenden. Lade es erneut herunter, um die GPU-Beschleunigung wieder einzuschalten.",
+    "redownloadButton": "GPU-Paket erneut herunterladen",
+    "downloadFailed": "Das GPU-Paket konnte nicht heruntergeladen werden.",
     "remove": "Entfernen",
     "dismiss": "Nicht jetzt",
     "cancel": "Abbrechen"
@@ -3862,7 +3866,7 @@
       },
       "gpuPackMigration": {
         "title": "GPU-Paket muss erneut heruntergeladen werden",
-        "description": "Ein Update hat eine veraltete GPU-Paket-Installation entfernt ({{packs}}). Lade es in den Einstellungen erneut herunter, um die GPU-Beschleunigung wiederherzustellen."
+        "description": "Diese Version kann dein bisheriges GPU-Paket ({{packs}}) nicht verwenden. Lade es in den Einstellungen erneut herunter, um die GPU-Beschleunigung wieder einzuschalten."
       },
       "cleanupFailed": {
         "title": "Bereinigung fehlgeschlagen",

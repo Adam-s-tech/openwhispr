@@ -3708,6 +3708,10 @@
     "activationFailedDescription": "OpenWhispr переключился на транскрипцию на CPU.",
     "reasoningActivationFailedDescription": "OpenWhispr переключился на обработку на CPU.",
     "retryActivation": "Повторить ускорение GPU",
+    "redownloadNeeded": "Требуется повторная загрузка GPU-пакета",
+    "redownloadNeededDescription": "Эта версия OpenWhispr не может использовать установленный GPU-пакет. Загрузите его заново, чтобы снова включить ускорение GPU.",
+    "redownloadButton": "Загрузить GPU-пакет заново",
+    "downloadFailed": "Не удалось загрузить GPU-пакет.",
     "remove": "Удалить",
     "dismiss": "Не сейчас",
     "cancel": "Отмена"
@@ -3735,7 +3739,7 @@
       },
       "gpuPackMigration": {
         "title": "Требуется повторная загрузка GPU-пакета",
-        "description": "Обновление удалило устаревшую установку GPU-пакета ({{packs}}). Загрузите его заново в настройках, чтобы восстановить ускорение GPU."
+        "description": "Эта версия не может использовать прежний GPU-пакет ({{packs}}). Загрузите его заново в настройках, чтобы снова включить ускорение GPU."
       },
       "cleanupFailed": {
         "title": "Не удалось выполнить очистку",

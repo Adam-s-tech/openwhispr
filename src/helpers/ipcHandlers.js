@@ -3432,10 +3432,11 @@ class IPCHandlers {
       const { detectNvidiaGpu } = require("../utils/gpuDetection");
       const gpuInfo = await detectNvidiaGpu();
       if (!this.whisperCudaManager) {
-        return { downloaded: false, downloading: false, path: null, gpuInfo };
+        return { downloaded: false, needsUpdate: false, downloading: false, path: null, gpuInfo };
       }
       return {
         downloaded: this.whisperCudaManager.isDownloaded(),
+        needsUpdate: this.whisperCudaManager.needsUpdate(),
         downloading: this.whisperCudaManager.isDownloading(),
         path: this.whisperCudaManager.getCudaBinaryPath(),
         gpuInfo,
@@ -3498,6 +3499,7 @@ class IPCHandlers {
       const [vulkan, gpuInfo] = await Promise.all([detectVulkanGpu(), detectNvidiaGpu()]);
       return {
         downloaded: this.whisperVulkanManager?.isDownloaded() ?? false,
+        needsUpdate: this.whisperVulkanManager?.needsUpdate() ?? false,
         downloading: this.whisperVulkanManager?.isDownloading() ?? false,
         vulkan,
         hasNvidiaGpu: gpuInfo.hasNvidiaGpu,
