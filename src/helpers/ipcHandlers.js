@@ -34,6 +34,15 @@ const {
 } = require("./policyResponseError");
 const { classifyAndLog } = require("./networkErrors");
 const { resolveSystemDefaultMicrophone } = require("./systemDefaultMicrophone");
+const { ipcErrorFields } = require("./ipcErrorFields");
+const {
+  PROVIDER_ERROR_CODES,
+  isProviderSettingsTarget,
+  providerHttpError,
+  providerError,
+  asProviderError,
+  redactProviderBody,
+} = require("./providerHttpErrors");
 const {
   registerConnectorIpc,
   createConnectorPolicyResolver,
@@ -44,8 +53,12 @@ const { createNoteAttendeesLookup, searchContacts } = require("./connectors/cont
 // packaged, and the route resolver only needs {id, baseUrl} per provider.
 const transcriptionProviderBaseUrls = () =>
   require("../models/modelRegistryData.json").transcriptionProviders;
+// Classified errors show the provider's display name; routes only carry its id.
+const transcriptionProviderName = (id) =>
+  require("../models/modelRegistryData.json").transcriptionProviders.find((p) => p.id === id)
+    ?.name || id;
 // ipcMain.handle keeps only the message when a promise rejects, dropping custom
-// props — proxy handlers return {error, code, messageKey} so the renderer can
+// props — proxy handlers return the classified fields so the renderer can
 // rebuild the error.
 const serializeIpcError =
   (fn) =>
@@ -53,7 +66,7 @@ const serializeIpcError =
     try {
       return await fn(...args);
     } catch (error) {
-      return { error: error.message, code: error.code, messageKey: error.messageKey };
+      return ipcErrorFields(error);
     }
   };
 
@@ -1542,6 +1555,12 @@ class IPCHandlers {
 
     ipcMain.handle("show-dictation-panel", () => {
       this.windowManager.showDictationPanel({ reposition: true });
+    });
+
+    ipcMain.handle("open-settings-section", async (_event, section) => {
+      if (!isProviderSettingsTarget(section)) return { success: false };
+      await this.windowManager.openSettings(section);
+      return { success: true };
     });
 
     ipcMain.handle("capture-dictation-target", async () => {
@@ -4614,7 +4633,10 @@ class IPCHandlers {
       serializeIpcError(async (event, { audioBuffer, language, keyterms }) => {
         const apiKey = this.environmentManager.getXaiKey();
         if (!apiKey) {
-          throw new Error("xAI API key not configured");
+          throw providerError(PROVIDER_ERROR_CODES.KEY_MISSING, {
+            provider: "xAI",
+            surface: "transcription",
+          });
         }
 
         const formData = new FormData();
@@ -4639,7 +4661,17 @@ class IPCHandlers {
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`xAI API Error: ${response.status} ${errorText}`);
+          debugLogger.warn("xAI transcription failed", {
+            status: response.status,
+            body: redactProviderBody(errorText),
+          });
+          throw providerHttpError({
+            provider: "xAI",
+            status: response.status,
+            body: errorText,
+            headers: response.headers,
+            surface: "transcription",
+          });
         }
 
         return await response.json();
@@ -4651,13 +4683,17 @@ class IPCHandlers {
       serializeIpcError(async (event, { audioBuffer, model, language, contextBias }) => {
         const apiKey = this.environmentManager.getMistralKey();
         if (!apiKey) {
-          throw new Error("Mistral API key not configured");
+          throw providerError(PROVIDER_ERROR_CODES.KEY_MISSING, {
+            provider: "Mistral",
+            surface: "transcription",
+          });
         }
 
+        const transcriptionModel = model || "voxtral-mini-latest";
         const formData = new FormData();
         const audioBlob = new Blob([Buffer.from(audioBuffer)], { type: "audio/webm" });
         formData.append("file", audioBlob, "audio.webm");
-        formData.append("model", model || "voxtral-mini-latest");
+        formData.append("model", transcriptionModel);
         if (language && language !== "auto") {
           formData.append("language", language);
         }
@@ -4677,7 +4713,18 @@ class IPCHandlers {
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`Mistral API Error: ${response.status} ${errorText}`);
+          debugLogger.warn("Mistral transcription failed", {
+            status: response.status,
+            body: redactProviderBody(errorText),
+          });
+          throw providerHttpError({
+            provider: "Mistral",
+            model: transcriptionModel,
+            status: response.status,
+            body: errorText,
+            headers: response.headers,
+            surface: "transcription",
+          });
         }
 
         return await response.json();
@@ -4706,7 +4753,10 @@ class IPCHandlers {
         const clientId = this.environmentManager.getCortiClientId();
         const clientSecret = this.environmentManager.getCortiClientSecret();
         if (!clientId || !clientSecret) {
-          throw new Error("Corti credentials not configured");
+          throw providerError(PROVIDER_ERROR_CODES.KEY_MISSING, {
+            provider: "Corti",
+            surface: "transcription",
+          });
         }
 
         const { transcribeAudio } = require("./cortiTranscription");
@@ -5378,7 +5428,10 @@ class IPCHandlers {
           const apiKey = this.environmentManager.getAnthropicKey();
 
           if (!apiKey) {
-            throw new Error("Anthropic API key not configured");
+            throw providerError(PROVIDER_ERROR_CODES.KEY_MISSING, {
+              provider: "Anthropic",
+              surface: "llm",
+            });
           }
 
           const systemPrompt = config?.systemPrompt || "";
@@ -5426,17 +5479,23 @@ class IPCHandlers {
 
           if (!response.ok) {
             const errorText = await response.text();
-            let errorData = { error: response.statusText };
-            try {
-              errorData = JSON.parse(errorText);
-            } catch {
-              errorData = { error: errorText || response.statusText };
-            }
-            throw new Error(
-              errorData.error?.message ||
-                errorData.error ||
-                `Anthropic API error: ${response.status}`
-            );
+            debugLogger.warn("Anthropic API error", {
+              status: response.status,
+              body: redactProviderBody(errorText),
+            });
+            return {
+              success: false,
+              ...ipcErrorFields(
+                providerHttpError({
+                  provider: "Anthropic",
+                  model: modelId,
+                  status: response.status,
+                  body: errorText,
+                  headers: response.headers,
+                  surface: "llm",
+                })
+              ),
+            };
           }
 
           const data = await response.json();
@@ -5454,7 +5513,13 @@ class IPCHandlers {
           return { success: true, text: outputText };
         } catch (error) {
           debugLogger.error("Anthropic reasoning error:", error);
-          return { success: false, error: error.message, messageKey: error.messageKey };
+          // A network failure rejects proxyFetch before any response.
+          return {
+            success: false,
+            ...ipcErrorFields(
+              asProviderError(error, { provider: "Anthropic", model: modelId, surface: "llm" })
+            ),
+          };
         }
       }
     );
@@ -6467,6 +6532,7 @@ class IPCHandlers {
     ipcMain.handle("retry-transcription", async (event, id, settings) => {
       const buffer = this.audioStorageManager.getAudioBuffer(id);
       if (!buffer) return { success: false, error: "Audio file not found" };
+      let providerErrorContext = null;
       try {
         let result;
         const preferredLanguage = settings?.preferredLanguage;
@@ -6498,6 +6564,22 @@ class IPCHandlers {
           throw err;
         }
 
+        // Mirrors the branch order below: self-hosted wins over OpenWhispr
+        // cloud, which wins over the BYOK providers. Managed, local and cloud
+        // failures keep their own shape.
+        if (
+          (route.transport === "http-batch" && route.provider === "self-hosted") ||
+          ((route.transport === "http-batch" || route.transport === "proxied") &&
+            settings?.cloudTranscriptionMode !== "openwhispr")
+        ) {
+          providerErrorContext = {
+            provider: transcriptionProviderName(route.provider),
+            selfHosted: route.provider === "self-hosted" || route.provider === "custom",
+            model: route.model,
+            surface: "transcription",
+          };
+        }
+
         if (route.transport === "managed") {
           const text = await this.executeManagedTranscription(event, route, {
             audioBuffer: buffer,
@@ -6521,7 +6603,16 @@ class IPCHandlers {
           });
           if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Self-hosted API Error: ${response.status} ${errorText}`);
+            debugLogger.warn("Self-hosted retry failed", {
+              status: response.status,
+              body: redactProviderBody(errorText),
+            });
+            throw providerHttpError({
+              ...providerErrorContext,
+              status: response.status,
+              body: errorText,
+              headers: response.headers,
+            });
           }
           const data = await response.json();
           if (data?.text) {
@@ -6616,7 +6707,10 @@ class IPCHandlers {
           const clientId = this.environmentManager.getCortiClientId();
           const clientSecret = this.environmentManager.getCortiClientSecret();
           if (!clientId || !clientSecret) {
-            throw new Error("Corti credentials not configured. Add them in Settings.");
+            throw providerError(PROVIDER_ERROR_CODES.KEY_MISSING, {
+              provider: "Corti",
+              surface: "transcription",
+            });
           }
           const { transcribeAudio } = require("./cortiTranscription");
           const { text } = await transcribeAudio({
@@ -6661,7 +6755,10 @@ class IPCHandlers {
                     ? this.environmentManager.getGroqKey()
                     : this.environmentManager.getOpenAIKey();
           if (!apiKey && provider !== "custom") {
-            throw new Error(`${provider} API key not configured`);
+            throw providerError(PROVIDER_ERROR_CODES.KEY_MISSING, {
+              provider: transcriptionProviderName(provider),
+              surface: "transcription",
+            });
           }
 
           // The renderer re-encodes WebM before uploading to a Custom endpoint
@@ -6717,7 +6814,17 @@ class IPCHandlers {
           const response = await proxyFetch(endpoint, { method: "POST", headers, body: formData });
           if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`${provider} API Error: ${response.status} ${errorText}`);
+            debugLogger.warn("Retry transcription provider failed", {
+              provider,
+              status: response.status,
+              body: redactProviderBody(errorText),
+            });
+            throw providerHttpError({
+              ...providerErrorContext,
+              status: response.status,
+              body: errorText,
+              headers: response.headers,
+            });
           }
           const data = await response.json();
           if (data?.text) {
@@ -6749,14 +6856,17 @@ class IPCHandlers {
           });
         }
         return { success: true, transcription: updated };
-      } catch (error) {
+      } catch (rawError) {
+        const error = providerErrorContext
+          ? asProviderError(rawError, providerErrorContext)
+          : rawError;
         debugLogger.error(
           "Retry transcription failed",
           { id, error: error.message, code: error.code },
           "audio-storage"
         );
         if (error.code) {
-          return { success: false, error: error.message, code: error.code, ...error };
+          return { success: false, ...ipcErrorFields(error) };
         }
         return { success: false, error: error.message };
       }
@@ -10143,6 +10253,7 @@ class IPCHandlers {
       ) => {
         const fs = require("fs");
         let cleanupUpload = null;
+        let providerErrorContext = null;
         try {
           if (typeof filePath !== "string") {
             return { success: false, error: "Invalid file path" };
@@ -10193,6 +10304,14 @@ class IPCHandlers {
             return { success: true, text };
           }
 
+          // Every branch below calls a BYOK provider or the user's own server.
+          providerErrorContext = {
+            provider: transcriptionProviderName(route.provider),
+            selfHosted: route.provider === "self-hosted" || route.provider === "custom",
+            model: route.model,
+            surface: "transcription",
+          };
+
           if (route.transport === "http-batch" && route.provider === "self-hosted") {
             // User's own server, so the 25 MB third-party cap does not apply.
             const { body, boundary } = buildMultipartBody(
@@ -10203,11 +10322,15 @@ class IPCHandlers {
             );
             const data = await postMultipart(new URL(route.endpoint), body, boundary);
             if (data.statusCode !== 200) {
-              throw new Error(
-                data.data?.error?.message ||
-                  data.data?.error ||
-                  `Self-hosted API Error: ${data.statusCode}`
-              );
+              debugLogger.warn("Self-hosted file transcription failed", {
+                status: data.statusCode,
+                body: redactProviderBody(data.data),
+              });
+              throw providerHttpError({
+                ...providerErrorContext,
+                status: data.statusCode,
+                body: data.data,
+              });
             }
             return { success: true, text: data.data.text };
           }
@@ -10221,7 +10344,10 @@ class IPCHandlers {
             const clientId = this.environmentManager.getCortiClientId();
             const clientSecret = this.environmentManager.getCortiClientSecret();
             if (!clientId || !clientSecret) {
-              throw new Error("Corti credentials not configured. Add them in Settings.");
+              throw providerError(PROVIDER_ERROR_CODES.KEY_MISSING, {
+                provider: "Corti",
+                surface: "transcription",
+              });
             }
             const { transcribeAudio } = require("./cortiTranscription");
             const { text } = await transcribeAudio({
@@ -10259,7 +10385,10 @@ class IPCHandlers {
           }
 
           if (!apiKey && route.provider !== "custom") {
-            throw new Error("No API key configured. Add your key in Settings.");
+            throw providerError(PROVIDER_ERROR_CODES.KEY_MISSING, {
+              provider: transcriptionProviderName(route.provider),
+              surface: "transcription",
+            });
           }
 
           const audioBuffer = fs.readFileSync(realByok);
@@ -10331,16 +10460,17 @@ class IPCHandlers {
             : undefined;
           const data = await postMultipart(url, body, boundary, headers);
 
-          if (data.statusCode === 401) {
-            return { success: false, error: "Invalid API key. Check your key in Settings." };
-          }
-          if (data.statusCode === 429) {
-            return { success: false, error: "Rate limit exceeded. Please try again later." };
-          }
           if (data.statusCode !== 200) {
-            throw new Error(
-              data.data?.error?.message || data.data?.error || `API error: ${data.statusCode}`
-            );
+            debugLogger.warn("BYOK file transcription failed", {
+              provider: route.provider,
+              status: data.statusCode,
+              body: redactProviderBody(data.data),
+            });
+            throw providerHttpError({
+              ...providerErrorContext,
+              status: data.statusCode,
+              body: data.data,
+            });
           }
 
           if (diarize && data.data?.speakers) {
@@ -10380,14 +10510,12 @@ class IPCHandlers {
           }
           const segments = timestamps ? mapVerboseSegments(data.data) : null;
           return { success: true, text: data.data.text, ...(segments ? { segments } : {}) };
-        } catch (error) {
+        } catch (rawError) {
+          const error = providerErrorContext
+            ? asProviderError(rawError, providerErrorContext)
+            : rawError;
           debugLogger.error("BYOK audio file transcription error", { error: error.message });
-          return {
-            success: false,
-            error: error.message,
-            code: error.code,
-            messageKey: error.messageKey,
-          };
+          return { success: false, ...ipcErrorFields(error) };
         } finally {
           cleanupUpload?.();
         }
@@ -11829,6 +11957,10 @@ class IPCHandlers {
 
     ipcMain.handle("get-pending-note-navigation", async () => {
       return this.windowManager?.consumePendingNoteNavigation() ?? null;
+    });
+
+    ipcMain.handle("get-pending-settings-section", async () => {
+      return this.windowManager?.consumePendingSettingsSection() ?? null;
     });
 
     ipcMain.handle("meeting-notification-ready", async (event) => {
