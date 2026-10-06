@@ -48,11 +48,7 @@ import { GetApiKeyLink } from "./ui/GetApiKeyLink";
 import { getCachedPlatform } from "../utils/platform";
 import { pickWhisperGpuBackend } from "../utils/whisperGpuPack";
 import logger from "../utils/logger";
-import type {
-  CudaWhisperStatus,
-  ParakeetCheckResult,
-  VulkanWhisperStatus,
-} from "../types/electron";
+import type { ParakeetCheckResult } from "../types/electron";
 
 interface LocalModel {
   model: string;
@@ -765,31 +761,40 @@ export default function TranscriptionModelPicker({
     return () => window.removeEventListener("openwhispr-models-cleared", handleModelsCleared);
   }, [loadLocalModels, loadParakeetModels]);
 
+  const readGpuStatus = useCallback(async () => {
+    try {
+      const [cuda, vulkan] = await Promise.all([
+        window.electronAPI?.getCudaWhisperStatus?.(),
+        window.electronAPI?.getVulkanWhisperStatus?.(),
+      ]);
+      // No pack to show or offer hides the card. A re-read can land here after
+      // another card removed the pack this one shows, so reset, never keep it.
+      const backend = pickWhisperGpuBackend(cuda, vulkan);
+      const status = backend === "cuda" ? cuda : backend === "vulkan" ? vulkan : null;
+      setGpuBackend(backend);
+      setGpuDownloaded(!!status?.downloaded);
+      setGpuFailed(!!status?.gpuFailed);
+      setGpuFailReason(status?.gpuFailReason ?? null);
+      setGpuNeedsUpdate(!!status?.needsUpdate);
+      // A failed attempt's error must not outlive the state it was about
+      setGpuDownloadError(null);
+      // A download is still running that no pending call here may report the
+      // end of: one started before Settings was opened, or on another card
+      if (status?.downloading) {
+        setGpuDownloading(true);
+        setGpuResumedDownload(true);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (!effectiveLocal || internalLocalProvider !== "whisper") return;
     if (getCachedPlatform() === "darwin") return;
-    const detect = async () => {
-      try {
-        const [cuda, vulkan] = await Promise.all([
-          window.electronAPI?.getCudaWhisperStatus?.(),
-          window.electronAPI?.getVulkanWhisperStatus?.(),
-        ]);
-        const backend = pickWhisperGpuBackend(cuda, vulkan);
-        const status = backend === "cuda" ? cuda : backend === "vulkan" ? vulkan : null;
-        setGpuBackend(backend);
-        setGpuDownloaded(!!status?.downloaded);
-        setGpuFailed(!!status?.gpuFailed);
-        setGpuFailReason(status?.gpuFailReason ?? null);
-        setGpuNeedsUpdate(!!status?.needsUpdate);
-        // A download this card started before Settings was closed is still running
-        if (status?.downloading) {
-          setGpuDownloading(true);
-          setGpuResumedDownload(true);
-        }
-      } catch {}
-    };
-    detect();
-  }, [effectiveLocal, internalLocalProvider]);
+    readGpuStatus();
+    // Retry on the fallback pop-up, or Remove on another card, changes the
+    // packs or the saved failure while this card stays mounted (#1736)
+    return window.electronAPI?.onWhisperGpuStatusChanged?.(readGpuStatus);
+  }, [effectiveLocal, internalLocalProvider, readGpuStatus]);
 
   useEffect(() => {
     if (!gpuDownloading || !gpuBackend) return;
@@ -822,6 +827,7 @@ export default function TranscriptionModelPicker({
   // Live server state: "GPU acceleration active" reflects what the server is
   // actually running on, not just that a pack is on disk (a crashed GPU server
   // silently falls back to CPU). Faster poll while an activation is in flight.
+  // Polls again at once when a re-read switches the card to another pack.
   useEffect(() => {
     if (!effectiveLocal || internalLocalProvider !== "whisper" || !gpuDownloaded) return;
     const poll = () => {
@@ -836,7 +842,7 @@ export default function TranscriptionModelPicker({
     poll();
     const id = setInterval(poll, gpuActivating ? 1000 : 5000);
     return () => clearInterval(id);
-  }, [effectiveLocal, internalLocalProvider, gpuDownloaded, gpuActivating]);
+  }, [effectiveLocal, internalLocalProvider, gpuDownloaded, gpuActivating, gpuBackend]);
 
   // Safety valve: a Vulkan cold start can take up to ~2 minutes (see #698);
   // past that the live status or a fallback notification settles the state.
@@ -846,33 +852,25 @@ export default function TranscriptionModelPicker({
     return () => clearTimeout(timeout);
   }, [gpuActivating]);
 
-  // Main falls back to CPU (and remembers it) when a GPU server crashes
+  // Main falls back to CPU (and remembers it) when a GPU server crashes. It
+  // saves the failure before it notifies, so the re-read shows the pack main
+  // now reports in use, exactly as reopening Settings would (#1736).
   useEffect(() => {
-    // Main saves the reason before it notifies. Read it from the backend that
-    // failed, not the installed-pack preference above: with both packs
-    // installed, the card can show CUDA while the server ran Vulkan (#1736).
-    const onFallback =
-      (readStatus: () => Promise<CudaWhisperStatus | VulkanWhisperStatus>) => () => {
-        setGpuFailed(true);
-        // Never show the previous failure's reason while the new one loads
-        setGpuFailReason(null);
-        setGpuActivating(false);
-        setGpuActive(false);
-        readStatus()
-          .then((status) => setGpuFailReason(status.gpuFailReason ?? null))
-          .catch(() => {});
-      };
-    const disposeCuda = window.electronAPI?.onCudaFallbackNotification?.(
-      onFallback(window.electronAPI.getCudaWhisperStatus)
-    );
-    const disposeVulkan = window.electronAPI?.onGpuFallbackNotification?.(
-      onFallback(window.electronAPI.getVulkanWhisperStatus)
-    );
+    const onFallback = () => {
+      setGpuFailed(true);
+      // Never show the previous failure's reason while the new one loads
+      setGpuFailReason(null);
+      setGpuActivating(false);
+      setGpuActive(false);
+      readGpuStatus();
+    };
+    const disposeCuda = window.electronAPI?.onCudaFallbackNotification?.(onFallback);
+    const disposeVulkan = window.electronAPI?.onGpuFallbackNotification?.(onFallback);
     return () => {
       disposeCuda?.();
       disposeVulkan?.();
     };
-  }, []);
+  }, [readGpuStatus]);
 
   const handleGpuDownload = async () => {
     setGpuDownloading(true);
