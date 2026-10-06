@@ -752,6 +752,10 @@
       "label": "Desativar saída de raciocínio",
       "help": "Ignora tokens de raciocínio para uma saída mais limpa. Recomendado para limpeza. Alguns servidores ignoram esta dica."
     },
+    "keepModelLoaded": {
+      "label": "Manter o modelo carregado",
+      "help": "Fica na memória em vez de ser removido após 5 minutos de inatividade, assim o próximo pedido evita a inicialização a frio. Vale para todos os recursos que usam um modelo local."
+    },
     "selfHosted": {
       "endpointHelp": "Aponte para um servidor compatível com OpenAI na sua rede local (ex.: Ollama, LM Studio, vLLM ou llama-server)."
     },

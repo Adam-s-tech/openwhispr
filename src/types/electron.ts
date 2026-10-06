@@ -1780,6 +1780,7 @@ declare global {
           localTranscriptionProvider: LocalTranscriptionProvider;
           model?: string;
           language?: string;
+          keepLocalModelLoaded: boolean;
           policySettled: boolean;
         }
       ) => Promise<void>;

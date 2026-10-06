@@ -773,6 +773,10 @@
       "label": "Désactiver la sortie de raisonnement",
       "help": "Ignore les jetons de raisonnement pour une sortie plus propre. Recommandé pour le nettoyage. Certains serveurs ignorent cette indication."
     },
+    "keepModelLoaded": {
+      "label": "Garder le modèle chargé",
+      "help": "Reste en mémoire au lieu d'être déchargé après 5 minutes d'inactivité, ce qui évite un démarrage à froid à la requête suivante. S'applique à toutes les fonctionnalités utilisant un modèle local."
+    },
     "selfHosted": {
       "endpointHelp": "Pointez vers un serveur compatible OpenAI sur votre réseau local (par ex. Ollama, LM Studio, vLLM ou llama-server)."
     },

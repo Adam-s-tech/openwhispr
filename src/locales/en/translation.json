@@ -773,6 +773,10 @@
       "label": "Disable thinking output",
       "help": "Skips reasoning tokens for cleaner output. Recommended for cleanup. Some servers ignore this hint."
     },
+    "keepModelLoaded": {
+      "label": "Keep model loaded",
+      "help": "Stays in memory instead of unloading after 5 idle minutes, so the next request skips the cold start. Applies to all features using a local model."
+    },
     "selfHosted": {
       "endpointHelp": "Point to an OpenAI-compatible server on your local network (e.g. Ollama, LM Studio, vLLM, or llama-server)."
     },
